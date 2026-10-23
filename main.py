@@ -68,10 +68,12 @@ def fix_negative_uhel(robot, start=True):
 
 
 def detect_hoop_center(img):
+    print("HOOPCENTER")
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) if img.ndim == 3 else img
     gray = cv2.medianBlur(gray, 5)
     circles = cv2.HoughCircles(gray, cv2.HOUGH_GRADIENT, dp=1,
                                minDist=gray.shape[0], param1=100, param2=30)
+    print(circles)
     return None if circles is None else circles[0, 0, :2]
 
 
@@ -115,6 +117,7 @@ if __name__ == "__main__":
     H = compute_homography()
     print(H)
 
+    time.sleep(1)
     robot.close()
 
     
