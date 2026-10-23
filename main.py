@@ -10,7 +10,7 @@ from calibrate import fix_negative_uhel
 #x = res[0]/res[2]
 #y = res[1]/res[2]
 D = np.array([0.135,0])
-Z_PODLOZKA = -0.1         # výška koncového bodu (z = 0.5 + q3)
+Z_PODLOZKA = -0.23  + 0.5      # výška koncového bodu (z = 0.5 + q3)
 
 def pixel_to_center(H, u, v):
     p = H @ np.array([u, v, 1.0])
@@ -24,23 +24,25 @@ def center_to_ee(cx, cy, phi):
 def target_q(robot, cx, cy, z, q_prev):
     phi = -np.pi / 2 if cy < 0 else np.pi / 2
     q4 = 3 * np.pi / 2 if cy < 0 else 5 * np.pi / 2   # tvoje konvence q4
+    print(cx,cy)
     ex, ey = center_to_ee(cx, cy, phi)
-    sols = []
-    for q in robot.ik(ex,ey,z,q4):
-        sols.append(q)
+    sols = [q for q in robot.ik(ex,ey,z,phi) if abs(q[3] - q4 < 0.00001)]
+    if not sols:return None
     return min(sols, key=lambda q: np.linalg.norm(q - q_prev))
 
 
 if __name__ == "__main__":
     robot = RobotBosch()
+    robot.soft_home()
+    robot.initialize()      
+
     
-    robot.initialize()          
     fix_negative_uhel(robot, True)
 
     H = np.load("calib/H.npy")
-    stred_aruko = np.array([268, 1170,1])
+    stred_aruko = np.array([1170,268, 1])
     res = H @ stred_aruko.T
-    cx, cy = pixel_to_center(H, 268, 1170)
+    cx, cy = pixel_to_center(H,1295,  971   )
     q = target_q(robot, cx, cy, Z_PODLOZKA + 0.05, robot.get_q())   # 5 cm nad podložkou
     if q is None:
         print("Poloha je nedosažitelná, nepohybuji.")
