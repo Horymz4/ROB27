@@ -7,10 +7,8 @@ import numpy as np
 from ctu_bosch_sr450 import RobotBosch
 from calibrate import fix_negative_uhel
 
-stred_aruko = np.array([268, 1170,1])
-res = H @ stred_aruko.T
-x = res[0]/res[2]
-y = res[1]/res[2]
+#x = res[0]/res[2]
+#y = res[1]/res[2]
 D = np.array([0.135,0])
 Z_PODLOZKA = -0.1         # výška koncového bodu (z = 0.5 + q3)
 
@@ -40,6 +38,8 @@ if __name__ == "__main__":
     fix_negative_uhel(robot, True)
 
     H = np.load("calib/H.npy")
+    stred_aruko = np.array([268, 1170,1])
+    res = H @ stred_aruko.T
     cx, cy = pixel_to_center(H, u, v)
     q = target_q(robot, cx, cy, Z_PODLOZKA + 0.05, robot.get_q())   # 5 cm nad podložkou
     if q is None:
