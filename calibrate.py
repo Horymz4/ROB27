@@ -7,7 +7,7 @@ import numpy as np
 from ctu_bosch_sr450 import RobotBosch
 
 # --- nastavení ---------------------------------------------------------------
-D = np.array([-0.135, 0.0])      # střed obruče v souřadnicích koncového bodu [m] (TODO změřit!)
+D = np.array([0.135, 0.0])      # střed obruče v souřadnicích koncového bodu [m] (TODO změřit!)
 OUT_DIR = "calib"
 
 CALIB_Q = [
@@ -45,7 +45,7 @@ def calibrate(robot):
     for i, q in enumerate(CALIB_Q):
         robot.move_to_q(np.array(q))
         robot.wait_for_motion_stop()
-        time.sleep(0.1)
+        time.sleep(0.5)
         q_real = robot.get_q()
         img = robot.grab_image()
         cv2.imwrite(f"{OUT_DIR}/img{i:02d}.png", img)
@@ -72,7 +72,7 @@ def fix_negative_uhel(robot, start=True):
 def detect_hoop_center(img):
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) if img.ndim == 3 else img
     gray = cv2.medianBlur(gray, 5)
-    R_PX = 110                      # změřený vnější poloměr obruče v pixelech
+    R_PX = 110    # změřený vnější poloměr obruče v pixelech
     circles = cv2.HoughCircles(
         gray, cv2.HOUGH_GRADIENT, dp=1, minDist=gray.shape[0],
         param1=100, param2=30,
@@ -110,14 +110,15 @@ def compute_homography():
 if __name__ == "__main__":
     robot = RobotBosch()
     
-    robot.initialize()                      
+    robot.initialize()          
+    robot.set_speed_relative(0.5)            
     fix_negative_uhel(robot, True)
 
     calibrate(robot)
 
     fix_negative_uhel(robot, False)
     robot.soft_home()
-    robot.close()
 
     H=compute_homography()
     print(H)
+    robot.close()
