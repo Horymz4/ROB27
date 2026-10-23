@@ -72,8 +72,12 @@ def fix_negative_uhel(robot, start=True):
 def detect_hoop_center(img):
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) if img.ndim == 3 else img
     gray = cv2.medianBlur(gray, 5)
-    circles = cv2.HoughCircles(gray, cv2.HOUGH_GRADIENT, dp=1,
-                               minDist=gray.shape[0], param1=100, param2=30)
+    R_PX = 110                      # změřený vnější poloměr obruče v pixelech
+    circles = cv2.HoughCircles(
+        gray, cv2.HOUGH_GRADIENT, dp=1, minDist=gray.shape[0],
+        param1=100, param2=30,
+        minRadius=int(2 * R_PX), maxRadius=int(4 * R_PX),
+    )
     return None if circles is None else circles[0, 0, :2]
 
 
