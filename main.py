@@ -105,16 +105,15 @@ def compute_homography():
 
 if __name__ == "__main__":
     robot = RobotBosch()
-    try:
-        robot.initialize()                       # vyžádá stisk ARM POWER
-        robot.set_speed_relative(0.3)            # pomalu pro první spuštění
-        fix_negative_uhel(robot, True)
+    
+    robot.initialize()                      
+    robot.set_speed_relative(0.3)            # pomalu pro první spuštění
+    fix_negative_uhel(robot, True)
 
-        calibrate(robot)
+    calibrate(robot)
 
-        fix_negative_uhel(robot, False)
-        robot.soft_home()
-    finally:
-        robot.close()
+    fix_negative_uhel(robot, False)
+    robot.soft_home()
+    robot.close()
 
     compute_homography()
