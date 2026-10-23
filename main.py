@@ -3,6 +3,12 @@ import time
 import cv2
 import numpy as np
 
+
+
+def se2(x,y,phi):
+    c,s = np.cos(phi), np.sin(phi)
+    return np.array([c, -s, x], [s, c, y], [x, y, 1])
+
 def calibrate():
     calibration_coords = [[-0.4, -0.2,-0.23, 3*np.pi/2],[-0.3, -0.25,-0.23, 3*np.pi/2], [0.4, 0.2,-0.23, 5*np.pi/2], [0.3, 0.25,-0.23, 5*np.pi/2]]
     for i in range(len(calibration_coords)):
@@ -29,6 +35,8 @@ def fix_negative_uhel(start=True):
 
 
 if __name__ == "__main__":
+    d = np.array([0.135, 0])
+    T_ee_hoop = se2(d[0], d[1], 0)
     robot = RobotBosch()
     robot.initialize()
     fix_negative_uhel(True)
