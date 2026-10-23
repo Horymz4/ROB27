@@ -49,6 +49,7 @@ def hoop_center(robot, q):
     return [float(T[0, 2]), float(T[1, 2])]
 
 
+<<<<<<< HEAD
 def build_targets(robot):
     """Pro 8 středů obruče vrátí kloubové konfigurace.
 
@@ -68,6 +69,23 @@ def build_targets(robot):
                 raise RuntimeError(f"Střed obruče ({cx}, {cy}) je nedosažitelný.")
             targets.append(min(sols, key=lambda q: abs(q[0])))
     return targets
+=======
+def calibrate(robot):
+    os.makedirs(OUT_DIR, exist_ok=True)
+    data = []
+    for i, q in enumerate(CALIB_Q):
+        robot.move_to_q(np.array(q))
+        robot.wait_for_motion_stop()
+        time.sleep(0.1)                          # počkat, až odezní chvění
+        
+        q_real = robot.get_q()
+        img = robot.grab_image()
+        cv2.imwrite(f"{OUT_DIR}/img{i:02d}.png", img)
+        data.append({"q": q_real.tolist(), "hoop_xy": hoop_center(robot, q_real)})
+        print(f"[{i + 1}/{len(CALIB_Q)}] hotovo")
+    with open(f"{OUT_DIR}/data.json", "w") as f:
+        json.dump(data, f, indent=2)
+>>>>>>> refs/remotes/origin/main
 
 
 def wind_q4(robot, start=True):
@@ -82,6 +100,7 @@ def wind_q4(robot, start=True):
     robot.wait_for_motion_stop()
 
 
+<<<<<<< HEAD
 # --- detekce obruče ----------------------------------------------------------
 def detect_hoop(img, r_px=None, scale=0.5):
     """Najde obruč a vrátí (u, v, r) v pixelech původního snímku, nebo None.
@@ -121,6 +140,16 @@ def collect(robot):
         print(f"[{i + 1}/{len(targets)}] hotovo")
     with open(f"{OUT_DIR}/data.json", "w") as f:
         json.dump(data, f, indent=2)
+=======
+def detect_hoop_center(img):
+    print("HOOPCENTER")
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) if img.ndim == 3 else img
+    gray = cv2.medianBlur(gray, 5)
+    circles = cv2.HoughCircles(gray, cv2.HOUGH_GRADIENT, dp=1,
+                               minDist=gray.shape[0], param1=100, param2=30)
+    print(circles)
+    return None if circles is None else circles[0, 0, :2]
+>>>>>>> refs/remotes/origin/main
 
 
 def compute_homography():
@@ -166,6 +195,7 @@ if __name__ == "__main__":
     ap.add_argument("--compute", action="store_true", help="jen spočítat H z uložených dat")
     args = ap.parse_args()
 
+<<<<<<< HEAD
     if args.compute:
         compute_homography()
     elif args.dry:
@@ -184,3 +214,20 @@ if __name__ == "__main__":
         finally:
             robot.close()
         compute_homography()
+=======
+    robot.initialize()
+    fix_negative_uhel(robot, True)
+
+    calibrate(robot)
+
+    fix_negative_uhel(robot, False)
+    robot.soft_home()
+
+    H = compute_homography()
+    print(H)
+
+    time.sleep(1)
+    robot.close()
+
+    
+>>>>>>> refs/remotes/origin/main
