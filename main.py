@@ -42,7 +42,8 @@ def calibrate(robot):
     for i, q in enumerate(CALIB_Q):
         robot.move_to_q(np.array(q))
         robot.wait_for_motion_stop()
-        time.sleep(0.5)                          # počkat, až odezní chvění
+        time.sleep(0.1)                          # počkat, až odezní chvění
+        
         q_real = robot.get_q()
         img = robot.grab_image()
         cv2.imwrite(f"{OUT_DIR}/img{i:02d}.png", img)
@@ -103,7 +104,7 @@ def compute_homography():
 if __name__ == "__main__":
     robot = RobotBosch()
 
-    robot.initialize()                       # vyžádá stisk ARM POWER
+    robot.initialize()
     fix_negative_uhel(robot, True)
 
     calibrate(robot)
@@ -111,6 +112,9 @@ if __name__ == "__main__":
     fix_negative_uhel(robot, False)
     robot.soft_home()
 
+    H = compute_homography()
+    print(H)
+
     robot.close()
 
-    compute_homography()
+    
