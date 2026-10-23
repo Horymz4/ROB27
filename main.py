@@ -1,5 +1,4 @@
-from ctu_bosch_sr450 import RobotBosch
-import opencv 
+from ctu_bosch_sr450 import RobotBosch 
 
 
 robot = RobotBosch()  # set argument tty_dev=None if you are not connected to robot, it will allow you to compute FK and IK offline
