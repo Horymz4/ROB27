@@ -25,9 +25,9 @@ def target_q(robot, cx, cy, z, q_prev):
     phi = -np.pi / 2 if cy < 0 else np.pi / 2
     q4 = 3 * np.pi / 2 if cy < 0 else 5 * np.pi / 2   # tvoje konvence q4
     ex, ey = center_to_ee(cx, cy, phi)
-    sols = [q for q in robot.ik(ex, ey, z, phi) if abs(q[3] - q4) < 1e-6]
-    if not sols:
-        return None                                # nedosažitelné
+    sols = []
+    for q in robot.ik(ex,ey,z,q4):
+        sols.append(q)
     return min(sols, key=lambda q: np.linalg.norm(q - q_prev))
 
 
@@ -40,7 +40,7 @@ if __name__ == "__main__":
     H = np.load("calib/H.npy")
     stred_aruko = np.array([268, 1170,1])
     res = H @ stred_aruko.T
-    cx, cy = pixel_to_center(H, u, v)
+    cx, cy = pixel_to_center(H, 268, 1170)
     q = target_q(robot, cx, cy, Z_PODLOZKA + 0.05, robot.get_q())   # 5 cm nad podložkou
     if q is None:
         print("Poloha je nedosažitelná, nepohybuji.")
