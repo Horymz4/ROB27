@@ -13,10 +13,10 @@ SPEED = 0.3                                               # musí odpovídat ryc
 IDS = (1, 2)
 N_IMAGES, PERIOD = 9, 2.0
 D = 0.135 * np.array([np.cos(np.radians(185)), np.sin(np.radians(185))])   # střed obruče v s.s. koncového bodu [m]
-Z_PODLOZKA = 0.5 - 0.23                                   # z = 0.5 + q3, q3 = -0.23 (výška podložky)
+Z_PODLOZKA = 0.5 - 0.28                                # z = 0.5 + q3, q3 = -0.23 (výška podložky)
 PATH_ORDER = [4, 3, 2, 1, 0]                              # pořadí bodů proc.points: od horního konce dolů (OVĚŘIT)
 APPROACH_MM = 80.0                                        # výška nad prvním bodem dráhy, ve které se najíždí [mm]
-STEP_MM = 15.0                                            # max. délka kroku po dráze [mm]
+STEP_MM = 10.0                                            # max. délka kroku po dráze [mm]
 MAX_STEP_S, MAX_BIG_S = 1.5, 8.0                          # max. doba kroku / prvního přesunu [s] (nahrazuje limit skoku)
 SAFETY, DT_MIN, MARGIN, N_ITER = 1.3, 0.3, 0.5, 3         # rezerva na dobu kroku, min. odstup kroků [s], rezerva startu [s], iterace plánu
 PHI_GRID = np.radians(np.arange(-180, 180, 15))           # povolená natočení koncového bodu (obruč je symetrická)
@@ -145,29 +145,32 @@ if __name__ == "__main__":
     assert abs(model["speed_relative"] - SPEED) < 1e-9, "model byl změřen při jiné rychlosti, změř znovu"
 
     robot = RobotBosch()
-    try:
-        robot.initialize()
-        robot.set_speed_relative(SPEED)
-        proc = image_proc()
-        proc.homography(np.load(H_FILE))
+    robot.initialize()
+    fix_negative_uhel(robot, True)
+    robot.set_speed_relative(SPEED)
+    proc = image_proc()
 
-        fix_negative_uhel(robot, True)
-        images, times = observe(robot, N_IMAGES, PERIOD)
+    proc.homography(np.load(H_FILE))
+    images, times = observe(robot, N_IMAGES, PERIOD)
+    centers, valid_times = proc.find_aruco_centers(images, times, IDS)
+    if len(valid_times) < 4:
+        raise RuntimeError(f"Značky nalezeny jen na {len(valid_times)} snímcích")
 
-        centers, valid_times = proc.find_aruco_centers(images, times, IDS)
-        if len(valid_times) < 4:
-            raise RuntimeError(f"Značky nalezeny jen na {len(valid_times)} snímcích")
-        proc.fit_rotation(centers, valid_times)
-        print(f"střed {np.round(proc.rotation_center, 1)} mm, R {proc.radius:.1f} mm, "
-              f"omega {np.degrees(proc.angular_velocity):.2f} °/s")
+    proc.fit_rotation(centers, valid_times)
+    print("Stredy znacek:", centers)
+    print("Casy:", valid_times)
+    rotation_center, radius = proc.find_rotation_center(centers)
+    print("Stred rotace:", rotation_center)
+    print("Polomer drahy stredu ctverce:", radius)
+    square_angle = proc.find_square_angle(centers, rotation_center)
+    print("Uhel ctverce vuci polomeru [deg]:", np.degrees(square_angle))
 
-        plan = make_plan(proc, robot, model)
-        if plan is None:
-            print("Plán je nedosažitelný, nepohybuji.")
-        else:
-            run_plan(robot, plan)
+    plan = make_plan(proc, robot, model)
+    if plan is None:
+        print("Plán je nedosažitelný, nepohybuji.")
+    else:
+       run_plan(robot, plan)
 
-        fix_negative_uhel(robot, False)
-        robot.soft_home()
-    finally:
-        robot.close()
+    fix_negative_uhel(robot, False)
+    robot.soft_home()
+    robot.close()
