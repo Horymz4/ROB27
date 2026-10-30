@@ -10,10 +10,10 @@ SPEED = 0.3
 IDS = (1, 2) #id aruco značek
 N_IMAGES, PERIOD = 9, 1.5
 D = 0.135 * np.array([np.cos(np.radians(185)), np.sin(np.radians(185))]) # střed obruče v s.s. koncového bodu [m]
-Z_PODLOZKA = 0.5 - 0.22                               # z = 0.5 + q3, q3 = -0.23 (výška podložky)
+Z_PODLOZKA = 0.28 # vyska podlozky od zeme (v q[2] == -0.22)
 PATH_ORDER = [4, 3, 2, 1, 0]                              # pořadí bodů proc.points: od horního konce dolů (OVĚŘIT)
 APPROACH_MM = 80.0                                        # výška nad prvním bodem dráhy, ve které se najíždí [mm]
-STEP_MM = 10.0                                            # max. délka kroku po dráze [mm]
+STEP_MM = 8.0                                            # max. délka kroku po dráze [mm]
 MAX_STEP_S, MAX_BIG_S = 0.7, 4.0                          # max. doba kroku / prvního přesunu [s] (nahrazuje limit skoku)
 SAFETY, DT_MIN, MARGIN, N_ITER = 1.3, 0.3, 0.5, 3         # rezerva na dobu kroku, min. odstup kroků [s], rezerva startu [s], iterace plánu
 PHI_GRID = np.radians(np.arange(-180, 180, 15))           # povolená natočení koncového bodu (obruč je symetrická)
@@ -107,15 +107,16 @@ def make_plan(proc, robot, model):
 
     d_up = duration(a, v, q_up - q_now)
 
-    #tuhle matiku furt nechapu ale ok
     gaps = np.full(n, 1.0)                                       # odstupy kroků [s]; první odhad
     t_first, tau = t_start + 10.0, None
     for _ in range(N_ITER):
         t0 = time.perf_counter()
         times = t_first + np.concatenate([[0.0], np.cumsum(gaps[1:])])
         sols = []
+
+        #vypocet ik
         for i, t in enumerate(times):
-            p = proc.predict_points(t)[i]                        # mm, z = výška nad deskou
+            p = proc.predict_points(t)[i]   # mm, z = výška nad deskou
             sols.append(ik_all(robot, p[0] / 1000, p[1] / 1000, Z_PODLOZKA + p[2] / 1000))
         qs, err = solve_path(sols, q_up, [MAX_BIG_S] + [MAX_STEP_S] * (n - 1), a, v)
         if qs is None:
