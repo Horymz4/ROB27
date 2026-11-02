@@ -43,7 +43,9 @@ STEP_MM = 6.7                                            # max. délka kroku po 
 MAX_STEP_S, MAX_BIG_S = 0.7, 4.0                          # max. doba kroku / prvního přesunu [s]
 MARGIN, N_ITER = 0.5, 3                                   # rezerva startu [s], iterace plánu
 PHI_GRID = np.radians(np.arange(-180, 180, 15))           # povolená natočení koncového bodu (obruč je symetrická)
-CAMERA_DELAY = 0.0                                        # o kolik je snímek starší než střed volání grab_image [s] (změřit)
+CAMERA_DELAY = 0.03                                       # čas od ZAČÁTKU volání grab_image do expozice snímku [s];
+                                                          # když obruč na vzdálených částech tyče pořád zaostává za otáčením, sniž (i do záporu)
+LOG_FILE = "run_log.csv"                                  # záznam každého kroku (pro ladění časování)
 
 # --- tyč a tělo robota (všechno v m, z = výška od země jako robot.fk) --------------------------------
 ROD_TO_BOARD = True        # tyč pokračuje od posledního bodu dráhy svisle dolů až na desku
@@ -73,14 +75,16 @@ def duration(a, v, dq):
 
 def observe(robot, n, period):
     robot.grab_image() #meaby pointless, fotime predtim aby se kamera startla
-    images, times = [], []
+    images, times, grab_s = [], [], []
     t_start = time.perf_counter()
     for i in range(n):
         t0 = time.perf_counter()
         images.append(robot.grab_image())
-        times.append(0.5 * (t0 + time.perf_counter()) - CAMERA_DELAY)
+        grab_s.append(time.perf_counter() - t0)
+        times.append(t0 + CAMERA_DELAY)                  # grab_image spouští snímání -> expozice je na začátku volání
         if i < n - 1:
             time.sleep(max(0.0, t_start + (i + 1) * period - time.perf_counter()))
+    print(f"grab_image trvá {np.mean(grab_s):.3f} s (dřív se bral střed volání -> snímky o ~{np.mean(grab_s) / 2:.2f} s starší)")
     return images, np.array(times)
 
 
@@ -232,7 +236,7 @@ def retarget(robot, proc, a, v, q_cur, q_ref, p_mm, rod_mm, bias=0.0):
     a ve stejné větvi jako q_ref, bezkolizně. bias = průměrné zpoždění robota za modelem [s]. Vrací (q, odhad času příjezdu) nebo (None, None)."""
     t_arr = time.perf_counter() + duration(a, v, q_ref - q_cur) + bias
     best = None
-    for _ in range(2):                                     # čas příjezdu závisí na cíli -> 2 iterace
+    for _ in range(4):                                     # čas příjezdu závisí na cíli -> iterovat do shody
         p = to_world(proc, p_mm, t_arr)[0]
         s = ik_all(robot, p[0], p[1], p[2], q_ref[3] + RETARGET_DPHI)
         if not len(s):
@@ -245,28 +249,50 @@ def retarget(robot, proc, a, v, q_cur, q_ref, p_mm, rod_mm, bias=0.0):
         if not len(s):
             return None, None
         best = min(s, key=lambda q: duration(a, v, q - q_cur))
-        t_arr = time.perf_counter() + duration(a, v, best - q_cur) + bias
+        t_new = time.perf_counter() + duration(a, v, best - q_cur) + bias
+        if abs(t_new - t_arr) < 0.01:                       # cíl spočítaný pro čas, kdy tam robot opravdu bude
+            break
+        t_arr = t_new
     return best, t_arr
+
+
+def _write_log(rows):
+    new = not __import__("os").path.exists(LOG_FILE)
+    with open(LOG_FILE, "a") as f:
+        if new:
+            f.write("bod,x_mm,y_mm,z_mm,r_od_osy_mm,doba_model_s,doba_skutecna_s,zpozdeni_s,bias_s,"
+                    "nejpomalejsi_kloub,odchylka_od_zpozdeni_mm\n")
+        f.write("\n".join(",".join(str(x) for x in r) for r in rows) + "\n---\n")
 
 
 def run_chase(robot, proc, model, dense, qs_ref, order, rod_mm):
     """Projede body dense v pořadí order; každý cíl se přepočítá na skutečný čas příjezdu.
     Vrací (dojel celou cestu?, index posledního dosaženého bodu nebo None)."""
     a, v = np.array(model["a"]), np.array(model["v"])
-    errs, reached = [], None
+    errs, reached, log = [], None, []
     q_cur = robot.get_q()
     for i in order:
         bias = float(np.median(errs[-5:])) if errs else 0.0     # učí se, o kolik robot zaostává za modelem
         q, t_arr = retarget(robot, proc, a, v, q_cur, qs_ref[i], dense[i], rod_mm, bias)
         if q is None:
             print(f"bod {i}: žádný bezkolizní cíl, zastavuji")
+            _write_log(log)
             return False, reached
+        t_send = time.perf_counter()
         robot.move_to_q(q)
         robot.wait_for_motion_stop()
-        errs.append(time.perf_counter() - t_arr + bias)
+        t_done = time.perf_counter()
+        errs.append(t_done - t_arr + bias)
+        p_w = to_world(proc, dense[i], t_arr)[0] * 1000
+        r_axis = np.linalg.norm(p_w[:2] - proc.rotation_center)  # vzdálenost bodu tyče od osy stolku [mm]
+        dq = np.abs(q - q_cur)
+        log.append((i, *np.round(dense[i], 1), round(r_axis, 1), round(t_arr - t_send - bias, 3),
+                    round(t_done - t_send, 3), round(t_done - t_arr, 3), round(bias, 3),
+                    int(np.argmax(a + dq / v)) + 1, round(r_axis * abs(proc.angular_velocity) * (t_done - t_arr), 1)))
         q_cur, reached = q, i
     errs = np.array(errs)
     print(f"skutečný příjezd vs. odhad [s]: střední {errs.mean():+.3f}, max {np.abs(errs).max():.3f}")
+    _write_log(log)
     return True, reached
 
 
