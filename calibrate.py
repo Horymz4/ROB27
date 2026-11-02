@@ -5,6 +5,7 @@ import time
 import cv2
 import numpy as np
 from ctu_bosch_sr450 import RobotBosch
+from image_processing import image_proc
 
 # --- nastavení ---------------------------------------------------------------
 D = np.array([0.135, 0.0])      # střed obruče v souřadnicích koncového bodu [m] (TODO změřit!)
@@ -85,6 +86,7 @@ def detect_hoop_center(img):
 
 
 def compute_homography():
+    proc = image_proc()
     """Ze uložených snímků a poloh spočítá H (pixel -> střed obruče v základně)."""
     with open(f"{OUT_DIR}/data.json") as f:
         data = json.load(f)
@@ -101,7 +103,7 @@ def compute_homography():
         return None
     pix = np.array(pix, dtype=np.float32)
     plane = np.array(plane, dtype=np.float32)
-    H, _ = cv2.findHomography(pix, plane)
+    H = proc.find_homography(pix, plane)
 
     proj = (H @ np.c_[pix, np.ones(len(pix))].T).T
     err = np.hypot(*(proj[:, :2] / proj[:, 2:] - plane).T)

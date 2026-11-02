@@ -10,7 +10,7 @@ from pathlib import Path
 from shutil import rmtree
 from subprocess import call
 
-from imageio import imwrite
+#from imageio import imwrite
 from matplotlib import pyplot as plt
 
 
