@@ -207,7 +207,7 @@ def make_plan(proc, robot, model):
         #vypocet ik: v každém kroku bezkolizní řešení nejbližší předchozímu
         q_prev = q_up
         for i, t in enumerate(times):
-            p = proc.predict_points(t+0.5)[i]   # mm, z = výška nad deskou
+            p = proc.predict_points(t)[i]   # mm, z = výška nad deskou
             q = select_ik(robot, ik_all(robot, p[0] / 1000, p[1] / 1000, Z_PODLOZKA + p[2] / 1000),
                           q_prev, rod_window(proc, rod_mm, t + 0.4 - LEAD_T - gaps[i], t + 0.4 + 0.3 * gaps[i]))
             if q is None:
