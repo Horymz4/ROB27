@@ -11,6 +11,7 @@ from image_processing import image_proc
 D = np.array([0.135, 0.0])      # střed obruče v souřadnicích koncového bodu [m] (TODO změřit!)
 OUT_DIR = "calib"
 
+# rozprostřeno po celém snímku, rameno mimo záběr (vybráno automaticky přes H_angle_candidate_mm.npy)
 CALIB_Q = [
     [0.671, -0.137, -0.23, 8.378],          # obruč v obraze ~ (240, 240) px
     [0.718, -0.785, -0.23, 8.203],          # obruč v obraze ~ (960, 240) px
