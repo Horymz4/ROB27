@@ -85,32 +85,6 @@ def detect_hoop_center(img):
     return None if circles is None else circles[0, 0, :2]
 
 
-def compute_homography():
-    proc = image_proc()
-    """Ze uložených snímků a poloh spočítá H (pixel -> střed obruče v základně)."""
-    with open(f"{OUT_DIR}/data.json") as f:
-        data = json.load(f)
-    pix, plane = [], []
-    for i, d in enumerate(data):
-        c = detect_hoop_center(cv2.imread(f"{OUT_DIR}/img{i:02d}.png"))
-        if c is None:
-            print(f"snímek {i}: kruh nenalezen, přeskočeno")
-            continue
-        pix.append(c)
-        plane.append(d["hoop_xy"])
-    if len(pix) < 4:
-        print("Nalezeno méně než 4 kruhy, homografii nelze spočítat.")
-        return None
-    pix = np.array(pix, dtype=np.float32)
-    plane = np.array(plane, dtype=np.float32)
-    H = proc.find_homography(pix, plane)
-
-    proj = (H @ np.c_[pix, np.ones(len(pix))].T).T
-    err = np.hypot(*(proj[:, :2] / proj[:, 2:] - plane).T)
-    print(f"reprojekční chyba [mm]: střední {1000 * err.mean():.1f}, max {1000 * err.max():.1f}")
-    np.save(f"{OUT_DIR}/H.npy", H)
-    return H
-
 
 if __name__ == "__main__":
     robot = RobotBosch()
@@ -124,6 +98,17 @@ if __name__ == "__main__":
     fix_negative_uhel(robot, False)
     robot.soft_home()
 
-    H=compute_homography()
+    proc = image_proc()
+    with open("calib/data.json") as f:
+        calibration = json.load(f)
+    calibration_images = np.array([cv2.imread(f"calib/img{i:02d}.png") for i in range(len(calibration))])
+    q = np.array([frame["q"] for frame in calibration])
+    # FK + posun stredu obruce 135 mm ve smeru 185 stupnu od osy x nastroje.
+    angle = q[:, 3] + np.deg2rad(185)
+    x = 250 * np.cos(q[:, 0]) + 200 * np.cos(q[:, 0] + q[:, 1]) + 135 * np.cos(angle)
+    y = 250 * np.sin(q[:, 0]) + 200 * np.sin(q[:, 0] + q[:, 1]) + 135 * np.sin(angle)
+    hoop_positions = [{"translation_vector": [cx, cy, 0]} for cx, cy in zip(x, y)]
+    H = proc.find_homography(calibration_images, hoop_positions)
+    np.save("H.npy", H)  # pixely -> mm
     print(H)
     robot.close()
