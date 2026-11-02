@@ -28,7 +28,7 @@ R_FOREARM, R_UPPER, Z_ARM = 0.06, 0.08, 0.55   # poloviční šířky ramen a v�
 CLEAR_MIN = 0.015          # min. vůle těla od tyče, jinak kolize
 LEAD_T = 0.55              # o kolik dopředu se míří za okamžik příjezdu [s] (= dřívější +0.4 v plánu + příjezd o 0.15 s dřív)
 TRANSIT_S = (0.5, 1.0)     # kde na přejezdu mezi kroky se kontrolují kolize (0.5 = půlka, 1 = cíl)
-T_CALC = 0.08              # čas na přepočet cíle mezi kroky [s] (započte se do rozestupu kroků v plánu)
+T_CALC = 0.07                 # čas na přepočet cíle mezi kroky [s] (započte se do rozestupu kroků v plánu)
 
 
 def center_to_ee(cx, cy, phi):
@@ -191,7 +191,7 @@ def make_plan(proc, robot, model):
     q_up = q_now.copy()
     q_up[2] = Z_PODLOZKA + poly[0][2] / 1000 - 0.5               # čistě svislý pohyb (mění se jen q3)
 
-    if not robot.in_limits(q_up):
+    if not robot.in_limits(q_up):   
         print("výška najíždění je mimo rozsah, sniž APPROACH_MM")
         return None
 
