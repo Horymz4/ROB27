@@ -12,7 +12,7 @@ import time
 
 import numpy as np
 
-SPEED = 0.3                                                   # musí odpovídat set_speed_relative v main
+SPEED = 0.5                                                   # musí odpovídat set_speed_relative v main
 DISTANCES = [(0.10, 0.20, 0.40),                              # q1 [rad]
              (0.10, 0.20, 0.40),                              # q2 [rad]
              (0.02, 0.05, 0.10),                              # q3 [m]

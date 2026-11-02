@@ -6,15 +6,15 @@ from ctu_bosch_sr450 import RobotBosch
 from calibrate import fix_negative_uhel
 from image_processing import image_proc
 
-SPEED = 0.3
+SPEED = 0.5
 IDS = (1, 2) #id aruco značek
 N_IMAGES, PERIOD = 9, 1.5
 D = 0.135 * np.array([np.cos(np.radians(185)), np.sin(np.radians(185))]) # střed obruče v s.s. koncového bodu [m]
-Z_PODLOZKA = 0.28 # vyska podlozky od zeme (v q[2] == -0.22)
+Z_PODLOZKA = 0.27 # vyska podlozky od zeme (v q[2] == -0.22)
 PATH_ORDER = [4, 3, 2, 1, 0]                              # pořadí bodů proc.points: od horního konce dolů (OVĚŘIT)
-APPROACH_MM = 80.0                                        # výška nad prvním bodem dráhy, ve které se najíždí [mm]
-STEP_MM = 8.0                                            # max. délka kroku po dráze [mm]
-MAX_STEP_S, MAX_BIG_S = 0.7, 4.0                          # max. doba kroku / prvního přesunu [s] (nahrazuje limit skoku)
+APPROACH_MM = 30.0                                        # výška nad prvním bodem dráhy, ve které se najíždí [mm]
+STEP_MM = 6.7 # nemenit                                           # max. délka kroku po dráze [mm]
+MAX_STEP_S, MAX_BIG_S = 4.0, 8.0                          # max. doba kroku / prvního přesunu [s] (nahrazuje limit skoku)
 SAFETY, DT_MIN, MARGIN, N_ITER = 1.3, 0.3, 0.5, 3         # rezerva na dobu kroku, min. odstup kroků [s], rezerva startu [s], iterace plánu
 PHI_GRID = np.radians(np.arange(-180, 180, 15))           # povolená natočení koncového bodu (obruč je symetrická)
 
@@ -116,7 +116,7 @@ def make_plan(proc, robot, model):
 
         #vypocet ik
         for i, t in enumerate(times):
-            p = proc.predict_points(t)[i]   # mm, z = výška nad deskou
+            p = proc.predict_points(t+0.7)[i]   # mm, z = výška nad deskou
             sols.append(ik_all(robot, p[0] / 1000, p[1] / 1000, Z_PODLOZKA + p[2] / 1000))
         qs, err = solve_path(sols, q_up, [MAX_BIG_S] + [MAX_STEP_S] * (n - 1), a, v)
         if qs is None:
@@ -128,13 +128,14 @@ def make_plan(proc, robot, model):
         t_first = t_start + (N_ITER + 1) * tau + d_up + durs[0] + MARGIN
     if time.perf_counter() > t_first - d_up - durs[0]:
         print("upozornění: výpočet plánu trval déle, než se čekalo; start bude pozdě")
-    return [(None, q_up, 0.0)] + [(t, q, d + 0.1) for t, q, d in zip(times, qs, durs)]
+    return [(None, q_up, 0.0)] + [(t, q, d + 0.15) for t, q, d in zip(times, qs, durs)]
 
 
 def run_plan(robot, plan):
     for t, q, lead in plan:
         if t is not None:
             time.sleep(max(0.0, t - lead - time.perf_counter()))
+            #print(t,q,lead)
         robot.move_to_q(q)
         robot.wait_for_motion_stop()
 
@@ -145,6 +146,7 @@ if __name__ == "__main__":
     assert abs(model["speed_relative"] - SPEED) == 0, "změnils rychlost blbecku"
 
     robot = RobotBosch()
+
     robot.initialize()
     fix_negative_uhel(robot, True)
     robot.set_speed_relative(SPEED)
@@ -153,9 +155,12 @@ if __name__ == "__main__":
     proc.homography(np.load("H_angle_candidate_mm.npy"))
     images, times = observe(robot, N_IMAGES, PERIOD)
     centers, valid_times = proc.find_aruco_centers(images, times, IDS)
-    if len(valid_times) < 4:
+    if len(valid_times) <= 4:
         print(f"Značky nalezeny jen na {len(valid_times)} snímcích")
-    else:
+        robot.move_to_q([0.7, 0.4, 0, 2*np.pi])
+        images, times = observe(robot, N_IMAGES, PERIOD)
+        centers, valid_times = proc.find_aruco_centers(images, times, IDS)
+    if len(valid_times) > 4:
         proc.fit_rotation(centers, valid_times)
         print("Stredy znacek:", centers)
         print("Casy:", valid_times)
@@ -164,11 +169,11 @@ if __name__ == "__main__":
         print("Polomer drahy stredu ctverce:", radius)
         square_angle = proc.find_square_angle(centers, rotation_center)
         print("Uhel ctverce vuci polomeru [deg]:", np.degrees(square_angle))
-
         plan = make_plan(proc, robot, model)
         if plan is not None: run_plan(robot, plan)
         else: print("Plán je nedosažitelný, nepohybuji.")
-    
+    else: 
+        print("Petrik je kokot")
     time.sleep(10)
     fix_negative_uhel(robot, False)
     robot.soft_home()
