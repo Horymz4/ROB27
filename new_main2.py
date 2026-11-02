@@ -12,9 +12,9 @@ N_IMAGES, PERIOD = 9, 1.5
 D = 0.135 * np.array([np.cos(np.radians(187)), np.sin(np.radians(187))]) # střed obruče v s.s. koncového bodu [m]
 Z_PODLOZKA = 0.27 # vyska podlozky od zeme (v q[2] == -0.22)
 APPROACH_MM = 30.0                                        # výška nad prvním bodem dráhy, ve které se najíždí [mm]
-STEP_MM = 6.7 # nemenit                                           # max. délka kroku po dráze [mm]
+STEP_MM = 8 # nemenit                                           # max. délka kroku po dráze [mm]
 MAX_STEP_S, MAX_BIG_S = 4.0, 8.0                          # max. doba kroku / prvního přesunu [s] (nahrazuje limit skoku)
-SAFETY, DT_MIN, MARGIN, N_ITER = 1.3, 0.05, 0.5, 3         # rezerva na dobu kroku, min. odstup kroků [s], rezerva startu [s], iterace plánu
+SAFETY, DT_MIN, MARGIN, N_ITER = 0.9, 0.05, 0.5, 3         # rezerva na dobu kroku, min. odstup kroků [s], rezerva startu [s], iterace plánu
 PHI_GRID = np.radians(np.arange(-180, 180, 15))           # povolená natočení koncového bodu (obruč je symetrická)
 
 # --- kolize těla robota s tyčí (všechno v m, z = výška od země jako robot.fk) ---------------------
@@ -192,7 +192,7 @@ def make_plan(proc, robot, model):
         #vypocet ik: v každém kroku bezkolizní řešení nejbližší předchozímu
         q_prev = q_up
         for i, t in enumerate(times):
-            p = proc.predict_points(t+0.4)[i]   # mm, z = výška nad deskou
+            p = proc.predict_points(t+0.5)[i]   # mm, z = výška nad deskou
             q = select_ik(robot, ik_all(robot, p[0] / 1000, p[1] / 1000, Z_PODLOZKA + p[2] / 1000),
                           q_prev, rod_world(proc, rod_mm, t + 0.4))
             if q is None:
