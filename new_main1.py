@@ -28,14 +28,14 @@ from ctu_bosch_sr450 import RobotBosch
 from calibrate import fix_negative_uhel
 from image_processing import image_proc
 
-SPEED = 0.3
+SPEED = 0.5
 IDS = (1, 2) #id aruco značek
-N_IMAGES, PERIOD = 9, 1.5
+N_IMAGES, PERIOD = 15, 0.7
 D = 0.135 * np.array([np.cos(np.radians(185)), np.sin(np.radians(185))]) # střed obruče v s.s. koncového bodu [m]
 Z_PODLOZKA = 0.28 # vyska podlozky od zeme (v q[2] == -0.22)
 PATH_ORDER = [4, 3, 2, 1, 0]                              # pořadí bodů proc.points: od horního konce dolů (OVĚŘIT)
-APPROACH_MM = 80.0                                        # výška nad prvním bodem dráhy, ve které se najíždí [mm]
-STEP_MM = 8.0                                            # max. délka kroku po dráze [mm]
+APPROACH_MM = 10.0                                        # výška nad prvním bodem dráhy, ve které se najíždí [mm]
+STEP_MM = 6.7                                            # max. délka kroku po dráze [mm]
 MAX_STEP_S, MAX_BIG_S = 0.7, 4.0                          # max. doba kroku / prvního přesunu [s]
 MARGIN, N_ITER = 0.5, 3                                   # rezerva startu [s], iterace plánu
 PHI_GRID = np.radians(np.arange(-180, 180, 15))           # povolená natočení koncového bodu (obruč je symetrická)
@@ -273,7 +273,7 @@ if __name__ == "__main__":
     robot.set_speed_relative(SPEED)
     proc = image_proc()
 
-    proc.homography(np.load("H_angle_candidate_mm.npy"))
+    proc.homography(np.load("H.npy"))
     images, times = observe(robot, N_IMAGES, PERIOD)
     centers, valid_times = proc.find_aruco_centers(images, times, IDS)
     if len(valid_times) < 4:
