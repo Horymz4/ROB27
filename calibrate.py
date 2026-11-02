@@ -94,7 +94,7 @@ if __name__ == "__main__":
     robot.set_speed_relative(0.5)            
     fix_negative_uhel(robot, True)
 
-    calibrate(robot)
+    #calibrate(robot)
 
     fix_negative_uhel(robot, False)
     robot.soft_home()
@@ -105,7 +105,7 @@ if __name__ == "__main__":
     calibration_images = np.array([cv2.imread(f"calib/img{i:02d}.png") for i in range(len(calibration))])
     q = np.array([frame["q"] for frame in calibration])
     # FK + posun stredu obruce 135 mm ve smeru 185 stupnu od osy x nastroje.
-    angle = q[:, 3] + np.deg2rad(185)
+    angle = q[:, 3] + np.deg2rad(187)
     x = 250 * np.cos(q[:, 0]) + 200 * np.cos(q[:, 0] + q[:, 1]) + 135 * np.cos(angle)
     y = 250 * np.sin(q[:, 0]) + 200 * np.sin(q[:, 0] + q[:, 1]) + 135 * np.sin(angle)
     hoop_positions = [{"translation_vector": [cx, cy, 0]} for cx, cy in zip(x, y)]

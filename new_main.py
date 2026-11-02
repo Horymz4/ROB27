@@ -116,7 +116,7 @@ def make_plan(proc, robot, model):
 
         #vypocet ik
         for i, t in enumerate(times):
-            p = proc.predict_points(t-1)[i]   # mm, z = výška nad deskou
+            p = proc.predict_points(t-0.3)[i]   # mm, z = výška nad deskou
             sols.append(ik_all(robot, p[0] / 1000, p[1] / 1000, Z_PODLOZKA + p[2] / 1000))
         qs, err = solve_path(sols, q_up, [MAX_BIG_S] + [MAX_STEP_S] * (n - 1), a, v)
         if qs is None:
@@ -174,14 +174,12 @@ if __name__ == "__main__":
         if plan is not None: run_plan(robot, plan)
         else: print("Plán je nedosažitelný, nepohybuji.")
         q = robot.get_q()
-        q[2] += 0.03
+        q[2] = 0
         robot.move_to_q(q)
     else: 
         print(f"Značky nalezeny jen na {len(valid_times)} snímcích")
 
-    q = robot.get_q()
-    q[2] += 0.03
-    robot.move_to_q(q)
+    
     #time.sleep(10)
     fix_negative_uhel(robot, False)
     robot.soft_home()

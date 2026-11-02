@@ -6,7 +6,7 @@ import json
 class image_proc:
     def __init__(self):
             self.H = None
-            self.points = np.array([[0, 0, 20], [0, 0, 50], [50, 0, 100], [50, 50, 150], [50, 50, 200]], dtype=np.float32)
+            self.points = np.array([[50, 50, 200 ], [50, 50, 150], [50, 0, 100], [0, 0, 50], [0, 0, 20], [0, 0, 20], [0, 0, 50], [50, 0, 100], [50, 50, 150], [50, 50, 200]], dtype=np.float32)
                                             # 20 abychom koncili nad deskou trochu
     def find_homography(self, images: np.ndarray, hoop_positions):
             """pixely -> XY kalibracni roviny"""
