@@ -33,7 +33,6 @@ IDS = (1, 2) #id aruco značek
 N_IMAGES, PERIOD = 15, 0.7
 D = 0.135 * np.array([np.cos(np.radians(187)), np.sin(np.radians(187))]) # střed obruče v s.s. koncového bodu [m]
 Z_PODLOZKA = 0.28 # vyska podlozky od zeme (v q[2] == -0.22)
-PATH_ORDER = [4, 3, 2, 1, 0]                              # pořadí bodů proc.points: od horního konce dolů (OVĚŘIT)
 APPROACH_MM = 10.0                                        # výška nad prvním bodem dráhy, ve které se najíždí [mm]
 STEP_MM = 6.7                                            # max. délka kroku po dráze [mm]
 MAX_STEP_S, MAX_BIG_S = 0.7, 4.0                          # max. doba kroku / prvního přesunu [s]
@@ -283,7 +282,7 @@ if __name__ == "__main__":
         print("Stred rotace:", proc.rotation_center, " polomer:", proc.radius,
               " omega [deg/s]:", np.degrees(proc.angular_velocity))
 
-        pts = proc.points[PATH_ORDER].astype(float)            # tyč od horního konce dolů [mm, souř. desky]
+        pts = proc.points.astype(float)            # tyč od horního konce dolů [mm, souř. desky]
         rod_mm = rod_samples(pts)
         poly = np.vstack([pts[0] + [0, 0, APPROACH_MM], pts])
         dense = [poly[0]]

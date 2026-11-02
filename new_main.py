@@ -14,7 +14,7 @@ Z_PODLOZKA = 0.27 # vyska podlozky od zeme (v q[2] == -0.22)
 APPROACH_MM = 30.0                                        # výška nad prvním bodem dráhy, ve které se najíždí [mm]
 STEP_MM = 6.7 # nemenit                                           # max. délka kroku po dráze [mm]
 MAX_STEP_S, MAX_BIG_S = 4.0, 8.0                          # max. doba kroku / prvního přesunu [s] (nahrazuje limit skoku)
-SAFETY, DT_MIN, MARGIN, N_ITER = 1.3, 0.1, 0.5, 3         # rezerva na dobu kroku, min. odstup kroků [s], rezerva startu [s], iterace plánu
+SAFETY, DT_MIN, MARGIN, N_ITER = 1.3, 0.05, 0.5, 3         # rezerva na dobu kroku, min. odstup kroků [s], rezerva startu [s], iterace plánu
 PHI_GRID = np.radians(np.arange(-180, 180, 15))           # povolená natočení koncového bodu (obruč je symetrická)
 
 
@@ -115,7 +115,7 @@ def make_plan(proc, robot, model):
 
         #vypocet ik
         for i, t in enumerate(times):
-            p = proc.predict_points(t)[i]   # mm, z = výška nad deskou
+            p = proc.predict_points(t+0.4)[i]   # mm, z = výška nad deskou
             sols.append(ik_all(robot, p[0] / 1000, p[1] / 1000, Z_PODLOZKA + p[2] / 1000))
         qs, err = solve_path(sols, q_up, [MAX_BIG_S] + [MAX_STEP_S] * (n - 1), a, v)
         if qs is None:
