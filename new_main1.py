@@ -31,7 +31,11 @@ from image_processing import image_proc
 SPEED = 0.5
 IDS = (1, 2) #id aruco značek
 N_IMAGES, PERIOD = 15, 0.7
-D = 0.135 * np.array([np.cos(np.radians(185)), np.sin(np.radians(185))]) # střed obruče v s.s. koncového bodu [m]
+with open("hoop_model.json") as _f:                         # výstup fit_calibration.py
+    _hm = json.load(_f)
+D = np.array(_hm["D_mm"]) / 1000                            # střed obruče v s.s. koncového bodu [m] (změřeno z kalibrace)
+Q2_OFF = _hm["q2_offset"]                                    # skutečné q2 = hlášené/povelové q2 + Q2_OFF [rad]
+H_FILE = "H_fit_mm.npy"                                      # H spočítaná spolu s D a Q2_OFF
 Z_PODLOZKA = 0.28 # vyska podlozky od zeme (v q[2] == -0.22)
 PATH_ORDER = [4, 3, 2, 1, 0]                              # pořadí bodů proc.points: od horního konce dolů (OVĚŘIT)
 APPROACH_MM = 10.0                                        # výška nad prvním bodem dráhy, ve které se najíždí [mm]
@@ -87,7 +91,10 @@ def ik_all(robot, cx, cy, z, phis=None):
     sols = []
     for phi in phis:
         ex, ey = center_to_ee(cx, cy, phi)
-        sols += [q for q in robot.ik(ex, ey, z, phi) if robot.in_limits(q)]
+        for q in robot.ik(ex, ey, z, phi):                  # ik počítá skutečné úhly -> povel q2 = q2 - Q2_OFF
+            q = q.copy(); q[1] -= Q2_OFF
+            if robot.in_limits(q):
+                sols.append(q)
     return np.array(sols).reshape(-1, 4)
 
 
@@ -131,7 +138,8 @@ def clearance(robot, qs, rod_w):
     qs = np.atleast_2d(qs)
     l1, l2 = robot.link_lengths
     elbow = l1 * np.c_[np.cos(qs[:, 0]), np.sin(qs[:, 0])]
-    ee = elbow + l2 * np.c_[np.cos(qs[:, 0] + qs[:, 1]), np.sin(qs[:, 0] + qs[:, 1])]
+    a12 = qs[:, 0] + qs[:, 1] + Q2_OFF                         # skutečný úhel předloktí
+    ee = elbow + l2 * np.c_[np.cos(a12), np.sin(a12)]
     z_ee = robot._z_offset + qs[:, 2]
     base = np.zeros_like(ee)
     p, rz = rod_w[:, :2], rod_w[:, 2][None, :]
@@ -273,7 +281,7 @@ if __name__ == "__main__":
     robot.set_speed_relative(SPEED)
     proc = image_proc()
 
-    proc.homography(np.load("H.npy"))
+    proc.homography(np.load(H_FILE))
     images, times = observe(robot, N_IMAGES, PERIOD)
     centers, valid_times = proc.find_aruco_centers(images, times, IDS)
     if len(valid_times) < 4:
