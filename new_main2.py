@@ -26,6 +26,7 @@ QUILL_BELOW = 0.01         # o kolik příruba sahá pod rovinu obruče
 R_ELBOW, Z_ELBOW = 0.09, 0.50       # poloměr pouzdra lokte a výška jeho spodku
 R_FOREARM, R_UPPER, Z_ARM = 0.06, 0.08, 0.55   # poloviční šířky ramen a výška jejich spodku
 CLEAR_MIN = 0.015          # min. vůle těla od tyče, jinak kolize
+LEAD_T = 0.55              # o kolik dopředu se míří za okamžik příjezdu [s] (= dřívější +0.4 v plánu + příjezd o 0.15 s dřív)
 
 
 def center_to_ee(cx, cy, phi):
@@ -160,7 +161,8 @@ def make_plan(proc, robot, model):
     a, v = np.array(model["a"]), np.array(model["v"])
     t_start = time.perf_counter()
     pts = proc.points.astype(float)    
-    rod_mm = rod_samples(pts)                                    # tyč pro kontrolu kolizí
+    rod_mm = rod_samples(pts[:int(np.argmin(pts[:, 2])) + 1])    # tyč = cesta dolů po nejnižší bod (bez cesty zpět)
+    proc.rod_mm = rod_mm
 
     #bod nad bludistěm
     poly = np.vstack([pts[0] + [0, 0, APPROACH_MM], pts])
@@ -210,16 +212,57 @@ def make_plan(proc, robot, model):
         t_first = t_start + (N_ITER + 1) * tau + d_up + durs[0] + MARGIN
     if time.perf_counter() > t_first - d_up - durs[0]:
         print("upozornění: výpočet plánu trval déle, než se čekalo; start bude pozdě")
-    return [(None, q_up, 0.0)] + [(t, q, d + 0.15) for t, q, d in zip(times, qs, durs)]
+    return [(None, q_up, 0.0, None)] + [(t, q, d + 0.15, i) for i, (t, q, d) in enumerate(zip(times, qs, durs))]
 
 
-def run_plan(robot, plan):
-    for t, q, lead in plan:
-        if t is not None:
-            time.sleep(max(0.0, t - lead - time.perf_counter()))
-            #print(t,q,lead)
+def retarget(robot, proc, i, q_cur, q_plan, a, v, bias):
+    """Cíl kroku i spočítaný pro SKUTEČNÝ čas příjezdu (teď + doba pohybu + bias): bezkolizní řešení IK
+    nejbližší aktuální poloze. Vrací (q, odhad času příjezdu)."""
+    t_arr = time.perf_counter() + duration(a, v, q_plan - q_cur) + bias
+    q_best = q_plan
+    for _ in range(3):                                           # cíl závisí na čase a čas na cíli
+        p = proc.predict_points(t_arr + LEAD_T)[i]
+        q = select_ik(robot, ik_all(robot, p[0] / 1000, p[1] / 1000, Z_PODLOZKA + p[2] / 1000),
+                      q_cur, rod_world(proc, proc.rod_mm, t_arr + LEAD_T))
+        if q is None:
+            print(f"krok {i}: přepočet nenašel bezkolizní řešení, jedu podle plánu")
+            return q_plan, t_arr
+        q_best = q
+        t_new = time.perf_counter() + duration(a, v, q - q_cur) + bias
+        if abs(t_new - t_arr) < 0.01:
+            break
+        t_arr = t_new
+    return q_best, t_arr
+
+
+def run_plan(robot, plan, proc, model):
+    """Jede podle plánu, ale cíl každého kroku přepočítá na skutečný čas příjezdu (když robot nestíhá,
+    míří tam, kde tyč bude, ne kde měla být). Vypíše, kde robot zaostával."""
+    a, v = np.array(model["a"]), np.array(model["v"])
+    errs, rows = [], []
+    q_cur = None
+    for t, q, lead, i in plan:
+        if t is None:
+            robot.move_to_q(q); robot.wait_for_motion_stop()
+            q_cur = np.array(q, float)
+            continue
+        time.sleep(max(0.0, t - lead - time.perf_counter()))
+        bias = float(np.median(errs[-5:])) if errs else 0.0     # o kolik je robot pomalejší než model
+        t_send = time.perf_counter()
+        q, t_arr = retarget(robot, proc, i, q_cur, q, a, v, bias)
         robot.move_to_q(q)
         robot.wait_for_motion_stop()
+        t_done = time.perf_counter()
+        errs.append(t_done - t_arr + bias)
+        d = proc.points[i] - proc.points[i - 1] if i > 0 else np.zeros(3)
+        kind = "sikmy" if abs(d[2]) > 1e-6 and np.hypot(d[0], d[1]) > 1e-6 else ("svisly" if abs(d[2]) > 1e-6 else "jiny")
+        rows.append((kind, t_done - (t - 0.15), t_done - t_arr + bias, t_done - t_send))
+        q_cur = q
+    for kind in ("svisly", "sikmy"):
+        r = np.array([x[1:] for x in rows if x[0] == kind])
+        if len(r):
+            print(f"{kind:7s}: zpoždění za plánem střední {r[:, 0].mean():+.2f} s (max {r[:, 0].max():+.2f}), "
+                  f"krok trvá o {r[:, 1].mean():+.3f} s déle než model, skutečná doba kroku {r[:, 2].mean():.2f} s")
        
 
 
@@ -253,7 +296,7 @@ if __name__ == "__main__":
         square_angle = proc.find_square_angle(centers, rotation_center)
         print("Uhel ctverce vuci polomeru [deg]:", np.degrees(square_angle))
         plan = make_plan(proc, robot, model)
-        if plan is not None: run_plan(robot, plan)
+        if plan is not None: run_plan(robot, plan, proc, model)
         else: print("Plán je nedosažitelný, nepohybuji.")
         q = robot.get_q()
         q[2] = 0
