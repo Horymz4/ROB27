@@ -1,7 +1,7 @@
 """
 Zjednodušená verze new_main3: robot si nejdřív spočítá celý plán (kde a kdy má být) a pak ho projede.
 Kolize s bludištěm se hlídají jen zjednodušeně: místo na rameni 2, které do tyče naráží (8.5 cm od osy
-hřídele směrem k lokti), je bráno jako svislý válec; žádný kus tyče, který sahá výš než jeho spodek, do něj nesmí.
+hřídele, 23° vlevo od směru ramene 2), je bráno jako svislý válec; žádný kus tyče, který sahá výš než jeho spodek, do něj nesmí.
 
   1. nafotit otáčející se desku -> střed otáčení, rychlost, natočení (image_processing)
   2. dráhu (body tyče) rozsekat na kroky po STEP_MM
@@ -29,7 +29,9 @@ MARGIN = 0.5                     # rezerva před startem [s]
 PHI_STEP = np.radians(5)         # jemnost hledání natočení obruče
 MAX_DPHI = np.radians(30)        # po dráze se q4 za krok otočí nejvýš o tolik (žádné otočky dokola)
 # místo na rameni 2, které naráží do tyče
-HOUSING_OFFSET = 0.085           # vzdálenost od osy hřídele směrem k lokti [m] (změřeno)
+HOUSING_OFFSET = 0.085           # vzdálenost od osy hřídele [m] (změřeno)
+HOUSING_ANGLE = np.radians(157)   # směr od osy hřídele, měřeno od směru ramene 2 (loket -> hřídel);
+                                 # + = vlevo při pohledu od základny, 0 = dál od lokte, 180° = zpět k lokti
 HOUSING_R = 0.015                 # poloměr toho místa + poloměr tyče + rezerva [m] (ZMĚŘIT)
 HOUSING_Z = 0.03                 # o kolik je spodek skříně výš než obruč, když je hřídel nahoře (q3 = 0) [m]
 
@@ -74,15 +76,15 @@ def rod_world(proc, rod_mm, t):
 
 
 def housing_gap(robot, q, rod_w):
-    """Vodorovná vzdálenost [m] místa na rameni 2 (HOUSING_OFFSET od osy hřídele k lokti) od nejbližšího
+    """Vodorovná vzdálenost [m] místa na rameni 2 (HOUSING_OFFSET od osy hřídele ve směru HOUSING_ANGLE) od nejbližšího
     kusu tyče, který sahá výš než jeho spodek (rameno nejezdí s q3, je pořád stejně vysoko).
     Kolize = méně než HOUSING_R."""
     high = rod_w[rod_w[:, 2] > robot._z_offset + HOUSING_Z][:, :2]
     if not len(high):
         return np.inf
     x, y, _, _ = robot.fk(q)
-    u = np.array([np.cos(q[0] + q[1]), np.sin(q[0] + q[1])])   # směr ramene 2 (od lokte ke hřídeli)
-    c = np.array([x, y]) - HOUSING_OFFSET * u                    # místo, které naráží
+    ang = q[0] + q[1] + HOUSING_ANGLE                            # směr ramene 2 + 23° doleva
+    c = np.array([x, y]) + HOUSING_OFFSET * np.array([np.cos(ang), np.sin(ang)])   # místo, které naráží
     return np.min(np.linalg.norm(high - c, axis=1))
 
 
