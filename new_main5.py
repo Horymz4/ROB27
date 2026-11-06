@@ -21,19 +21,19 @@ N_IMAGES, PERIOD = 15, 0.7       # focení desky
 D = 0.135 * np.array([np.cos(np.radians(187)), np.sin(np.radians(187))])  # střed obruče vůči koncovému bodu [m]
 Z_PODLOZKA = 0.27                # výška desky v souřadnicích robota [m]
 APPROACH_MM = 30.0               # o kolik nad horním koncem tyče se najíždí [mm]
-STEP_MM = 6.7                        # délka kroku po tyči [mm]
+STEP_MM = 8                        # délka kroku po tyči [mm]
 CAMERA_DELAY = 0.03              # čas od začátku volání grab_image do pořízení snímku [s]
-LEAD_T = -0.11                   # o kolik za okamžik příjezdu se míří [s]; předbíhá -> sniž, zaostává -> zvyš
+LEAD_T = -0.18                  # o kolik za okamžik příjezdu se míří [s]; předbíhá -> sniž, zaostává -> zvyš
 SAFETY, GAP = 1.1, 0.05          # rozestup kroků = SAFETY * doba pohybu + GAP [s]
-MARGIN = 0.5                     # rezerva před startem [s]
+MARGIN = 0.35                     # rezerva před startem [s]
 PHI_STEP = np.radians(5)         # jemnost hledání natočení obruče
 MAX_DPHI = np.radians(30)        # po dráze se q4 za krok otočí nejvýš o tolik (žádné otočky dokola)
 # místo na rameni 2, které naráží do tyče
 HOUSING_OFFSET = 0.085           # vzdálenost od osy hřídele [m] (změřeno)
 HOUSING_ANGLE = np.radians(157)   # směr od osy hřídele, měřeno od směru ramene 2 (loket -> hřídel);
                                  # + = vlevo při pohledu od základny, 0 = dál od lokte, 180° = zpět k lokti
-HOUSING_R = 0.035                 # poloměr toho místa + poloměr tyče + rezerva [m] (ZMĚŘIT)
-HOUSING_SAFE = 0.03              # rezerva navíc: když to jde, vezme se poloha s vůlí aspoň HOUSING_R + HOUSING_SAFE [m]
+HOUSING_R = 0.03                 # poloměr toho místa + poloměr tyče + rezerva [m] (ZMĚŘIT)
+HOUSING_SAFE = 0.0                # rezerva navíc: když to jde, vezme se poloha s vůlí aspoň HOUSING_R + HOUSING_SAFE [m]
 HOUSING_DZ = 0.03                # o kolik je spodek toho dílu výš než rovina obruče [m]
                                  # díl je přichycený k hřídeli, takže jezdí nahoru/dolů spolu s obručí
 
@@ -196,7 +196,7 @@ if __name__ == "__main__":
             centers, valid_times = proc.find_aruco_centers(images, times)
         if len(valid_times) < 6: 
             print(f"Značky nalezeny jen na {len(valid_times)} snímcích")
-            raise RuntimeError 
+            raise RuntimeError("Aruco značky nejsou vidět")
         print(f'pocet snimku: {len(valid_times)}')
         proc.fit_rotation(centers, valid_times)
         print(f"střed otáčení {proc.rotation_center}, poloměr {proc.radius:.1f} mm, "
