@@ -134,12 +134,17 @@ def clearance(robot, qs, rod_w):
         clr = np.minimum(clr, np.where(mask, dist - r - R_ROD, np.inf).min(axis=1))
     return clr
 
-def select_ik(robot, sols, q_prev, rod_ws, q_ref=None):
+def select_ik(robot, sols, q_prev, rod_ws, q_ref=None, small_step=False):
     """Z řešení IK vybere to, které je v limitech kloubů, nekoliduje s tyčí a je nejblíž q_prev
     (nejmenší změna kloubů ||q - q_prev||, ne podle času); s q_ref vybírá nejbližší q_ref (plánované poloze).
     Kolize se kontrolují v bodech přejezdu TRANSIT_S z q_prev; rod_ws[k] je tyč v okamžiku, kdy je robot
     v bodě TRANSIT_S[k] (tyč se během kroku otáčí). Vrací q nebo None."""
     sols = np.array([q for q in sols if robot.in_limits(q)]).reshape(-1, 4)
+    if small_step and len(sols):
+        # po dráze jen malé kroky: q4 se nesmí otočit o víc než MAX_DPHI (jinak by zvolil stejnou polohu
+        # o 360° jinak a otočil se dokola) a loket nesmí přeskočit na druhou stranu
+        sols = sols[(np.abs(sols[:, 3] - q_prev[3]) <= MAX_DPHI)
+                    & (np.sign(sols[:, 1]) == np.sign(q_prev[1]))]
     if not len(sols):
         return None
     ok = np.ones(len(sols), bool)
@@ -176,8 +181,9 @@ def solve_path(sols_per_step, q_start, limits_s, a, v):
         dur = np.where(diff > 1e-9, a + diff / v, 0.0).max(axis=2)
         trans = costs[-1][None, :] + np.linalg.norm(cur[:, None, :] - prev[None, :, :], axis=2)
         trans[dur > lim] = np.inf
-        if i >= 1:                                               # po dráze: žádné velké otočky q4
+        if i >= 1:                                               # po dráze: žádné velké otočky q4 ani přeskok lokte
             trans[diff[:, :, 3] > MAX_DPHI] = np.inf
+            trans[np.sign(cur[:, None, 1]) != np.sign(prev[None, :, 1])] = np.inf
         back, cost = trans.argmin(axis=1), trans.min(axis=1)
         ok = np.isfinite(cost)
         if not ok.any():
@@ -261,7 +267,7 @@ def retarget(robot, proc, i, q_cur, q_plan, a, v, bias):
         p = proc.predict_points(t_arr + LEAD_T)[i]
         q = select_ik(robot, ik_all(robot, p[0] / 1000, p[1] / 1000, Z_PODLOZKA + p[2] / 1000),
                       q_cur, [rod_world(proc, proc.rod_mm, t_send + s * (t_arr - t_send) + LEAD_T) for s in TRANSIT_S],
-                      q_ref=q_plan)
+                      q_ref=q_plan, small_step=i > 0)
         if q is None:
             print(f"krok {i}: žádné bezkolizní řešení, ZASTAVUJI")
             return None, None
