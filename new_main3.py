@@ -15,19 +15,19 @@ APPROACH_MM = 30.0                                  # výška nad prvním bodem 
 STEP_MM = 8                                         #  nemenit max. délka kroku po dráze [mm]
 MAX_STEP_S, MAX_BIG_S = 4.0, 8.0                    # max. doba kroku / prvního přesunu [s] (nahrazuje limit skoku)
 SAFETY, DT_MIN, MARGIN, N_ITER = 1.0, 0.05, 0.5, 3  # rezerva na dobu kroku, min. odstup kroků [s], rezerva startu [s], iterace plánu
-PHI_GRID = np.radians(np.arange(-180, 180, 15))     # povolená natočení koncového bodu
+PHI_GRID = np.radians(np.arange(-180, 180, 5))     # povolená natočení koncového bodu
 
 ROD_TO_BOARD = True                                                      # tyč pokračuje od posledního bodu dráhy svisle dolů až na desku
 ROD_SAMPLE_MM = 2        # hustota bodů tyče pro kontrolu kolizí
 R_ROD = 0.0045              # poloměr tyče
 R_QUILL = 0.04             # poloměr hřídele + příruby kolem osy koncového bodu (sahá od obruče nahoru)
-QUILL_BELOW = -0.02         # o kolik příruba sahá pod rovinu obruče
-R_ELBOW, Z_ELBOW = 0.09, 0.50       # poloměr pouzdra lokte a výška jeho spodku
-R_FOREARM, R_UPPER, Z_ARM = 0.06, 0.08, 0.55   # poloviční šířky ramen a výška jejich spodku
+QUILL_BELOW = 0.03        # o kolik příruba sahá pod rovinu obruče
+R_ELBOW, Z_ELBOW = 0.09, 0.51       # poloměr pouzdra lokte a výška jeho spodku
+R_FOREARM, R_UPPER, Z_ARM = 0.06, 0.08, 0.51   # poloviční šířky ramen a výška jejich spodku
 CLEAR_MIN = 0.015          # min. vůle těla od tyče, jinak kolize
 
-LEAD_T = 0.1               # o kolik za okamžik příjezdu se míří [s]; jen dorovnání zpoždění kamery.
-                           # Předbíhá -> sniž (i na 0 nebo do záporu), zaostává -> zvyš po 0.05
+LEAD_T = 0.2               # o kolik za okamžik příjezdu [s]; jen dorovnání zpoždění kamery
+
 CAMERA_DELAY = 0.03        # čas od začátku volání grab_image do pořízení snímku [s]
 ARRIVE_EARLY = 0.15        # plán posílá pohyb tak, aby robot dojel o tolik dřív než plánovaný čas [s]
 MAX_DPHI = np.radians(45)  # max. pootočení q4 za jeden krok po dráze (velké otočky by držákem/hřídelí smetly tyč)
@@ -36,7 +36,6 @@ T_CALC = 0.06                 # čas na přepočet cíle mezi kroky [s] (započt
 
 L_LIMB = 0.07        # délka ramene od koncového bodu směrem ke středu obruče [m]
 R_LIMB = 0.04        # poloviční šířka tohoto ramene [m] 
-EE_PHI_SIGN = (0, 0, 1)  # phi = s0*q0 + s1*q1 + s3*q3; u SR450 je natočení přímo q4 (viz robot.fk)
 
 
 def center_to_ee(cx, cy, phi):
@@ -44,8 +43,7 @@ def center_to_ee(cx, cy, phi):
     return np.array([cx, cy]) - R @ D
 
 def ee_phi(qs):
-    s0, s1, s3 = EE_PHI_SIGN
-    return s0 * qs[:, 0] + s1 * qs[:, 1] + s3 * qs[:, 3]
+    return qs[:, 3] #+ qs[:, 1] 
 
 def duration(a, v, dq):
     """Odhad doby pohybu o dq podle změřeného modelu: max přes klouby z a_j + |dq_j| / v_j."""
