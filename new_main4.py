@@ -101,8 +101,8 @@ def make_rod(points_mm, step=5.0):
 
 def ik_nearest(robot, p_mm, q_prev, first, rod_w):
     """Konfigurace, při které je střed obruče v bodě p_mm (svět, z nad deskou), nejbližší q_prev
-    a skříní ramene 2 nenarazí do tyče (rod_w). Po dráze (first=False) jen natočení do MAX_DPHI
-    od předchozího a bez přeskoku lokte."""
+    a skříní ramene 2 nenarazí do tyče (rod_w; None = kolize se nekontroluje). Po dráze (first=False)
+    jen natočení do MAX_DPHI od předchozího a bez přeskoku lokte."""
     x, y, z = p_mm[0] / 1000, p_mm[1] / 1000, Z_PODLOZKA + p_mm[2] / 1000
     if first:
         phis = np.arange(-np.pi, np.pi, PHI_STEP)
@@ -116,7 +116,7 @@ def ik_nearest(robot, p_mm, q_prev, first, rod_w):
     if not first:
         sols = [q for q in sols
                 if abs(q[3] - q_prev[3]) <= MAX_DPHI + 1e-9 and np.sign(q[1]) == np.sign(q_prev[1])]
-    gaps = [housing_gap(robot, q, rod_w) for q in sols]
+    gaps = [np.inf if rod_w is None else housing_gap(robot, q, rod_w) for q in sols]
     sols = [(q, g) for q, g in zip(sols, gaps) if g >= HOUSING_R]   # bez kolize skříně ramene 2 s tyčí
     if not sols:
         return None
@@ -135,13 +135,15 @@ def make_plan(robot, proc, path, model, n_iter=3):
     q_start = robot.get_q()
     gaps = np.full(len(path), 0.5)                       # první odhad rozestupů [s]
     t_first = time.perf_counter() + 5.0
+    i_low = int(np.argmin(path[:, 2]))                   # nejnižší bod = konec cesty dolů
+    print(f"kolize s tyčí se kontrolují pro body 0-{i_low}, cesta nahoru od bodu {i_low + 1} bez kontroly")
     for _ in range(n_iter):
         t_calc = time.perf_counter()
         times = t_first + np.r_[0.0, np.cumsum(gaps[1:])]
         qs, durs, q = [], [], q_start
         for i, t in enumerate(times):
             q_new = ik_nearest(robot, proc.predict_points(t + LEAD_T)[i], q, first=(i == 0),
-                               rod_w=rod_world(proc, rod_mm, t + LEAD_T))
+                               rod_w=rod_world(proc, rod_mm, t + LEAD_T) if i <= i_low else None)
             if q_new is None:
                 print(f"Plán selhal: bod {i} nemá řešení IK bez kolize skříně ramene 2 s tyčí")
                 return None
