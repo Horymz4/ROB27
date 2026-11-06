@@ -28,6 +28,7 @@ CLEAR_MIN = 0.015          # min. vůle těla od tyče, jinak kolize
 
 LEAD_T = 0.2               # o kolik za okamžik příjezdu [s]; jen dorovnání zpoždění kamery
 
+
 CAMERA_DELAY = 0.03        # čas od začátku volání grab_image do pořízení snímku [s]
 ARRIVE_EARLY = 0.15        # plán posílá pohyb tak, aby robot dojel o tolik dřív než plánovaný čas [s]
 MAX_DPHI = np.radians(45)  # max. pootočení q4 za jeden krok po dráze (velké otočky by držákem/hřídelí smetly tyč)
