@@ -15,18 +15,19 @@ APPROACH_MM = 30.0                                        # výška nad prvním 
 STEP_MM = 8 # nemenit                                           # max. délka kroku po dráze [mm]
 MAX_STEP_S, MAX_BIG_S = 4.0, 8.0                          # max. doba kroku / prvního přesunu [s] (nahrazuje limit skoku)
 SAFETY, DT_MIN, MARGIN, N_ITER = 0.9, 0.05, 0.5, 3         # rezerva na dobu kroku, min. odstup kroků [s], rezerva startu [s], iterace plánu
-PHI_GRID = np.radians(np.arange(-180, 180, 15))           # povolená natočení koncového bodu (obruč je symetrická)
+PHI_GRID = np.radians(np.arange(-180, 180, 15))           # povolená natočení koncového bodu
 
-# --- kolize těla robota s tyčí (všechno v m, z = výška od země jako robot.fk) ---------------------
 ROD_TO_BOARD = True        # tyč pokračuje od posledního bodu dráhy svisle dolů až na desku
-ROD_SAMPLE_MM = 5.0        # hustota bodů tyče pro kontrolu kolizí
-R_ROD = 0.004              # poloměr tyče
+ROD_SAMPLE_MM = 2        # hustota bodů tyče pro kontrolu kolizí
+R_ROD = 0.0045              # poloměr tyče
 R_QUILL = 0.04             # poloměr hřídele + příruby kolem osy koncového bodu (sahá od obruče nahoru)
 QUILL_BELOW = 0.01         # o kolik příruba sahá pod rovinu obruče
 R_ELBOW, Z_ELBOW = 0.09, 0.50       # poloměr pouzdra lokte a výška jeho spodku
 R_FOREARM, R_UPPER, Z_ARM = 0.06, 0.08, 0.55   # poloviční šířky ramen a výška jejich spodku
 CLEAR_MIN = 0.015          # min. vůle těla od tyče, jinak kolize
-LEAD_T = 0.55              # o kolik dopředu se míří za okamžik příjezdu [s] (= dřívější +0.4 v plánu + příjezd o 0.15 s dřív)
+
+#nevim kdyz je tohle dole mensi tak to jezdi lip i kdyz to nedava smyls
+LEAD_T = 0.4              # o kolik dopředu se míří za okamžik příjezdu [s] (= dřívější +0.4 v plánu + příjezd o 0.15 s dřív)
 TRANSIT_S = (0.5, 1.0)     # kde na přejezdu mezi kroky se kontrolují kolize (0.5 = půlka, 1 = cíl)
 T_CALC = 0.07                 # čas na přepočet cíle mezi kroky [s] (započte se do rozestupu kroků v plánu)
 
@@ -100,7 +101,7 @@ def _seg_dist(p, a, b):
 def clearance(robot, qs, rod_w):
     """Nejmenší vůle [m] mezi tělem robota (hřídel, loket, ramena) a tyčí pro každé řešení qs (K,4)."""
     qs = np.atleast_2d(qs)
-    l1, l2 = robot.link_lengths
+    l1, l2 = robot.link_lengths()
     elbow = l1 * np.c_[np.cos(qs[:, 0]), np.sin(qs[:, 0])]
     ee = elbow + l2 * np.c_[np.cos(qs[:, 0] + qs[:, 1]), np.sin(qs[:, 0] + qs[:, 1])]
     z_ee = robot._z_offset + qs[:, 2]
@@ -189,7 +190,7 @@ def make_plan(proc, robot, model):
 
     q_now = robot.get_q()
     q_up = q_now.copy()
-    q_up[2] = Z_PODLOZKA + poly[0][2] / 1000 - 0.5               # čistě svislý pohyb (mění se jen q3)
+    q_up[2] = Z_PODLOZKA + poly[0][2] / 1000 - 0.5 
 
     if not robot.in_limits(q_up):   
         print("výška najíždění je mimo rozsah, sniž APPROACH_MM")
@@ -197,7 +198,7 @@ def make_plan(proc, robot, model):
 
     d_up = duration(a, v, q_up - q_now)
 
-    gaps = np.full(n, 1.0)                                       # odstupy kroků [s]; první odhad
+    gaps = np.full(n, 1.0)  # odstupy kroků [s]; první odhad
     t_first, tau = t_start + 10.0, None
     for _ in range(N_ITER):
         t0 = time.perf_counter()
@@ -250,10 +251,9 @@ def retarget(robot, proc, i, q_cur, q_plan, a, v, bias):
 
 
 def run_plan(robot, plan, proc, model):
-    """Jede podle plánu, ale cíl každého kroku přepočítá na skutečný čas příjezdu (když robot nestíhá,
-    míří tam, kde tyč bude, ne kde měla být). Vypíše, kde robot zaostával."""
+    """Jede frajer, cíl každého kroku přepočítá na skutečný čas příjezdu"""
     a, v = np.array(model["a"]), np.array(model["v"])
-    errs, rows = [], []
+    errs = []
     q_cur = None
     for t, q, lead, i in plan:
         if t is None:
@@ -272,18 +272,8 @@ def run_plan(robot, plan, proc, model):
         t_done = time.perf_counter()
         errs.append(t_done - t_arr + bias)
         d = proc.points[i] - proc.points[i - 1] if i > 0 else np.zeros(3)
-        kind = "sikmy" if abs(d[2]) > 1e-6 and np.hypot(d[0], d[1]) > 1e-6 else ("svisly" if abs(d[2]) > 1e-6 else "jiny")
-        rows.append((kind, t_done - (t - 0.15), t_done - t_arr + bias, t_done - t_send, clr, i))
         q_cur = q
-    for kind in ("svisly", "sikmy"):
-        r = np.array([x[1:5] for x in rows if x[0] == kind])
-        if len(r):
-            print(f"{kind:7s}: zpoždění za plánem střední {r[:, 0].mean():+.2f} s (max {r[:, 0].max():+.2f}), "
-                  f"krok trvá o {r[:, 1].mean():+.3f} s déle než model, skutečná doba kroku {r[:, 2].mean():.2f} s")
-    if rows:
-        k = int(np.argmin([x[4] for x in rows]))
-        print(f"nejmenší vůle těla od tyče (podle modelu): {1000 * rows[k][4]:.0f} mm v kroku {rows[k][5]} "
-              f"-> pokud robot narazil a tady je víc než ~0, jsou rozměry R_*/Z_* menší než skutečnost")
+    
        
 
 
@@ -302,11 +292,13 @@ if __name__ == "__main__":
     proc.homography(np.load("H_angle_candidate_mm.npy"))
     images, times = observe(robot, N_IMAGES, PERIOD)
     centers, valid_times = proc.find_aruco_centers(images, times, IDS)
+
     if len(valid_times) <= 4:
         print(f"Značky nalezeny jen na {len(valid_times)} snímcích")
         robot.move_to_q([0.7, 0.4, 0, 2*np.pi])
         images, times = observe(robot, N_IMAGES, PERIOD)
         centers, valid_times = proc.find_aruco_centers(images, times, IDS)
+
     if len(valid_times) > 4:
         proc.fit_rotation(centers, valid_times)
         print("Stredy znacek:", centers)
@@ -326,7 +318,7 @@ if __name__ == "__main__":
         print(f"Značky nalezeny jen na {len(valid_times)} snímcích")
 
     
-    #time.sleep(10)
+    robot.set_speed_relative(1)
     fix_negative_uhel(robot, False)
     robot.soft_home()
     robot.close()
