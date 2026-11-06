@@ -1,17 +1,16 @@
 import cv2 as cv
 import numpy as np
 import json
+from robotics_toolbox.utils.perception import find_hoop_homography
 
 
 class image_proc:
     def __init__(self):
             self.H = None
             self.points = np.array([[50, 50, 200 ], [50, 50, 150], [50, 0, 100], [0, 0, 50], [0, 0, 20], [0, 0, 20], [0, 0, 50], [50, 0, 100], [50, 50, 150], [50, 50, 200]], dtype=np.float32)
-                                            # 20 abychom koncili nad deskou trochu
+
     def find_homography(self, images: np.ndarray, hoop_positions):
             """pixely -> XY kalibracni roviny"""
-            from robotics_toolbox.utils.perception import find_hoop_homography
-    
             self.H = find_hoop_homography(images, hoop_positions)
             return self.H
 
@@ -30,18 +29,22 @@ class image_proc:
                 meta = json.load(f)
             return np.array([frame["t"] for frame in meta["frames"]])
 
-    def find_aruco_centers(self, images, times, marker_ids):
-            """Vrati stredy (N, 2, 2) v rovine stolku a casy (N,)."""
+    def find_aruco_centers(self, images, times):
+            """Vrati stredy znacek 1 a 2 (N, 2, 2) a casy snimku s obema znackami."""
             dictionary = cv.aruco.getPredefinedDictionary(cv.aruco.DICT_4X4_50)
             detector = cv.aruco.ArucoDetector(dictionary)
+            
             centers, valid_times = [], []
             for image, time in zip(images, times):
                 corners, ids, _ = detector.detectMarkers(image)
-                if ids is None or any(marker_id not in ids for marker_id in marker_ids):
+                if ids is None:
                     continue
+                ids = ids.ravel()
+                if 1 not in ids or 2 not in ids:
+                    continue
+                indices = [np.flatnonzero(ids == 1)[0], np.flatnonzero(ids == 2)[0]]
                 points = []
-                for marker_id in marker_ids:
-                    index = np.flatnonzero(ids.ravel() == marker_id)[0]
+                for index in indices:
                     plane_corners = cv.perspectiveTransform(corners[index], self.H)
                     points.append(plane_corners[0].mean(axis=0))
                 centers.append(points)
@@ -74,9 +77,41 @@ class image_proc:
             self.square_angle = self.find_square_angle(centers, self.rotation_center)
             radial = centers.mean(axis=1) - self.rotation_center
             angles = np.unwrap(np.arctan2(radial[:, 1], radial[:, 0]))
-            self.reference_time = times[0]
-            self.angular_velocity, self.reference_angle = np.polyfit(
+            self.reference_time = times[-1]
+            self.angular_velocity, _ = np.polyfit(
                 times - self.reference_time, angles, 1)
+            self.reference_angle = angles[-1]  # Skutecne natoceni na poslednim validnim snimku.
+            marker_vectors = centers[-1] - self.rotation_center
+            self.marker_reference_angles = np.arctan2(marker_vectors[:, 1], marker_vectors[:, 0])
+
+    def time_correction(self, image, time, previous_offset=0.0):
+            """Celkovy posun casu [s] z ID 1/2; time je cas snimku. Bez znacky vrati None.
+
+            Pouziti: predict_points(time + offset). Vysledek nahrazuje stary offset.
+            previous_offset vybira nejblizsi otacku pri opakovanych korekcich.
+            """
+            dictionary = cv.aruco.getPredefinedDictionary(cv.aruco.DICT_4X4_50)
+            detector = cv.aruco.ArucoDetector(dictionary)
+            corners, ids, _ = detector.detectMarkers(image)
+            if ids is None:
+                return None
+            errors = []
+            for index, marker_id in enumerate(ids.ravel()):
+                if marker_id not in (1, 2):
+                    continue
+                center = cv.perspectiveTransform(corners[index], self.H)[0].mean(axis=0)
+                vector = center - self.rotation_center
+                if np.linalg.norm(vector) < 1e-6:
+                    continue  # Znacka na ose otaceni neurcuje natoceni svym stredem.
+                measured = np.arctan2(vector[1], vector[0])
+                expected = (self.marker_reference_angles[marker_id - 1] + self.angular_velocity
+                            * (time - self.reference_time + previous_offset))
+                errors.append(measured - expected)
+            if not errors:
+                return None
+            # Kruhovy prumer: funguje i pres prechod mezi -pi a +pi.
+            error = np.arctan2(np.sin(errors).mean(), np.cos(errors).mean())
+            return previous_offset + error / self.angular_velocity
 
     def predict_points(self, time):
             """Predikuje XYZ bodu (pocet_bodu, 3) v mm; vysku zachova."""
@@ -98,12 +133,23 @@ class image_proc:
 
 if __name__ == "__main__":
     proc = image_proc()
-    H = np.load("image_testing/H_angle_candidate_mm.npy")
-    proc.homography(H)
+    
+    with open("calib/data.json") as f:
+        calibration = json.load(f)
+    calibration_images = np.array([cv.imread(f"calib/img{i:02d}.png") for i in range(len(calibration))])
+    q = np.array([frame["q"] for frame in calibration])
+    # FK + posun stredu obruce 135 mm ve smeru 185 stupnu od osy x nastroje.
+    angle = q[:, 3] + np.deg2rad(187)
+    x = 250 * np.cos(q[:, 0]) + 200 * np.cos(q[:, 0] + q[:, 1]) + 135 * np.cos(angle)
+    y = 250 * np.sin(q[:, 0]) + 200 * np.sin(q[:, 0] + q[:, 1]) + 135 * np.sin(angle)
+    hoop_positions = [{"translation_vector": [cx, cy, 0]} for cx, cy in zip(x, y)]
+    H = proc.find_homography(calibration_images, hoop_positions)
+
+    np.save("H.npy", H)  # pixely -> mm
     data_dir = "data_rotace1"
     images = proc.images_to_numpy(data_dir)
     times = proc.meta_to_time(f"{data_dir}/meta.json")
-    centers, times = proc.find_aruco_centers(images, times, (1, 2))
+    centers, times = proc.find_aruco_centers(images, times)
     print("Stredy znacek:", centers)
     print("Casy:", times)
     rotation_center, radius = proc.find_rotation_center(centers)
