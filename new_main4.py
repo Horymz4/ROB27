@@ -23,7 +23,7 @@ Z_PODLOZKA = 0.27                # výška desky v souřadnicích robota [m]
 APPROACH_MM = 30.0               # o kolik nad horním koncem tyče se najíždí [mm]
 STEP_MM = 8.0                    # délka kroku po tyči [mm]
 CAMERA_DELAY = 0.03              # čas od začátku volání grab_image do pořízení snímku [s]
-LEAD_T = 0.2                     # o kolik za okamžik příjezdu se míří [s]; předbíhá -> sniž, zaostává -> zvyš
+LEAD_T = 0.0                   # o kolik za okamžik příjezdu se míří [s]; předbíhá -> sniž, zaostává -> zvyš
 SAFETY, GAP = 1.1, 0.05          # rozestup kroků = SAFETY * doba pohybu + GAP [s]
 MARGIN = 0.5                     # rezerva před startem [s]
 PHI_STEP = np.radians(5)         # jemnost hledání natočení obruče
@@ -32,8 +32,8 @@ MAX_DPHI = np.radians(30)        # po dráze se q4 za krok otočí nejvýš o to
 HOUSING_OFFSET = 0.085           # vzdálenost od osy hřídele [m] (změřeno)
 HOUSING_ANGLE = np.radians(157)   # směr od osy hřídele, měřeno od směru ramene 2 (loket -> hřídel);
                                  # + = vlevo při pohledu od základny, 0 = dál od lokte, 180° = zpět k lokti
-HOUSING_R = 0.015                 # poloměr toho místa + poloměr tyče + rezerva [m] (ZMĚŘIT)
-HOUSING_DZ = 0.03                # o kolik je spodek toho dílu výš než rovina obruče [m] (ZMĚŘIT);
+HOUSING_R = 0.035                 # poloměr toho místa + poloměr tyče + rezerva [m] (ZMĚŘIT)
+HOUSING_DZ = 0.03                # o kolik je spodek toho dílu výš než rovina obruče [m]
                                  # díl je přichycený k hřídeli, takže jezdí nahoru/dolů spolu s obručí
 
 
@@ -170,7 +170,7 @@ def run_plan(robot, plan):
 if __name__ == "__main__":
     with open("duration_model.json") as f:
         model = json.load(f)
-    assert abs(model["speed_relative"] - SPEED) < 1e-9, "model doby pohybu je změřen při jiné rychlosti"
+    assert abs(model["speed_relative"] - SPEED) == 0, "změnils rychlost blbecku"
 
     robot = RobotBosch()
     robot.initialize()
@@ -182,8 +182,16 @@ if __name__ == "__main__":
 
         images, times = observe(robot, N_IMAGES, PERIOD)
         centers, valid_times = proc.find_aruco_centers(images, times)
-        if len(valid_times) < 5:
-            raise RuntimeError(f"Značky nalezeny jen na {len(valid_times)} snímcích")
+        if len(valid_times) < 6:
+            print(f"Značky nalezeny jen na {len(valid_times)} snímcích")
+            robot.move_to_q([0.7, 0.4, 0, 2*np.pi])
+            robot.wait_for_motion_stop()
+            images, times = observe(robot, N_IMAGES, PERIOD)
+            centers, valid_times = proc.find_aruco_centers(images, times)
+        if len(valid_times) < 6: 
+            print(f"Značky nalezeny jen na {len(valid_times)} snímcích")
+            raise RuntimeError 
+        print(f'pocet snimku: {len(valid_times)}')
         proc.fit_rotation(centers, valid_times)
         print(f"střed otáčení {proc.rotation_center}, poloměr {proc.radius:.1f} mm, "
               f"omega {np.degrees(proc.angular_velocity):.1f} °/s")
@@ -191,9 +199,11 @@ if __name__ == "__main__":
         plan = make_plan(robot, proc, make_path(proc.points), model)
         if plan is not None:
             run_plan(robot, plan)
-            q = robot.get_q(); q[2] = 0.0                # dráha končí nahoře -> svisle nahoru
-            robot.move_to_q(q); robot.wait_for_motion_stop()
-            fix_negative_uhel(robot, False)
-            robot.soft_home()
+            q = robot.get_q(); q[2] = 0.0
+            robot.move_to_q(q)
+            robot.wait_for_motion_stop()
     finally:
+        robot.set_speed_relative(1)
+        fix_negative_uhel(robot, False)
+        robot.soft_home()
         robot.close()
