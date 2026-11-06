@@ -28,7 +28,6 @@ CLEAR_MIN = 0.015          # min. vůle těla od tyče, jinak kolize
 
 LEAD_T = 0.2               # o kolik za okamžik příjezdu [s]; jen dorovnání zpoždění kamery
 
-
 CAMERA_DELAY = 0.03        # čas od začátku volání grab_image do pořízení snímku [s]
 ARRIVE_EARLY = 0.15        # plán posílá pohyb tak, aby robot dojel o tolik dřív než plánovaný čas [s]
 MAX_DPHI = np.radians(45)  # max. pootočení q4 za jeden krok po dráze (velké otočky by držákem/hřídelí smetly tyč)
@@ -224,6 +223,13 @@ def make_plan(proc, robot, model):
     q_now = robot.get_q()
     q_up = q_now.copy()
     q_up[2] = Z_PODLOZKA + poly[0][2] / 1000 - 0.5 
+    # Obruč se otáčí s deskou, takže q4 se za jízdu posune zhruba o omega * doba jízdy (cestou zpět nejvíc).
+    # Už při zvedání proto natočíme q4 na ten konec rozsahu, od kterého je ve směru otáčení nejvíc místa.
+    # Jinak by robot narazil na limit q4 a jediné zbylé řešení by bylo otočit se o 360°.
+    if proc.angular_velocity > 0:
+        q_up[3] = robot.q_min[3] + np.pi
+    else:
+        q_up[3] = robot.q_max[3] - np.pi
 
     if not robot.in_limits(q_up):   
         print("výška najíždění je mimo rozsah, sniž APPROACH_MM")
@@ -244,6 +250,9 @@ def make_plan(proc, robot, model):
             p = proc.predict_points(t_arr + LEAD_T)[i]   # mm, z = výška nad deskou
             sols.append(free_ik(robot, ik_all(robot, p[0] / 1000, p[1] / 1000, Z_PODLOZKA + p[2] / 1000),
                                 [rod_world(proc, rod_mm, t_arr + LEAD_T)]))
+        # Obruč se otáčí spolu s deskou, takže q4 se za jízdu posune zhruba o omega * doba jízdy.
+        # Pro první bod se proto berou jen natočení q4, od kterých je v tom směru dost místa do limitu,
+        # jinak by robot na konci (cestou zpět) narazil na limit q4 a jediné řešení by bylo otočit se o 360°.
         qs, err = solve_path(sols, q_up, [MAX_BIG_S] + [MAX_STEP_S] * (n - 1), a, v)
         if qs is None:
             print("Plán selhal:", err)
@@ -252,6 +261,14 @@ def make_plan(proc, robot, model):
         gaps = np.array([0.0] + [max(DT_MIN, SAFETY * d + T_CALC) for d in durs[1:]])
         tau = tau or (time.perf_counter() - t0)                  # doba jednoho výpočtu plánu
         t_first = t_start + (N_ITER + 1) * tau + d_up + durs[0] + MARGIN
+    q4s = np.array(qs)[:, 3]
+    left = (robot.q_max[3] - q4s[0]) if proc.angular_velocity > 0 else (q4s[0] - robot.q_min[3])
+    need = abs(proc.angular_velocity) * 1.2 * (times[-1] - times[0])
+    if need > left:
+        print(f"upozornění: q4 nemusí stačit na celou jízdu (potřeba ~{np.degrees(need):.0f}°, je {np.degrees(left):.0f}°)")
+    print(f"q4 během plánu: {np.degrees(q4s.min()):.0f}° až {np.degrees(q4s.max()):.0f}° "
+          f"(limity {np.degrees(robot.q_min[3]):.0f}° až {np.degrees(robot.q_max[3]):.0f}°), "
+          f"omega {np.degrees(proc.angular_velocity):.1f} °/s")
     if time.perf_counter() > t_first - d_up - durs[0]:
         print("upozornění: výpočet plánu trval déle, než se čekalo; start bude pozdě")
     return [(None, q_up, 0.0, None)] + [(t, q, d + ARRIVE_EARLY, i) for i, (t, q, d) in enumerate(zip(times, qs, durs))]
