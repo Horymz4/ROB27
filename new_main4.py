@@ -1,7 +1,7 @@
 """
 Zjednodušená verze new_main3: robot si nejdřív spočítá celý plán (kde a kdy má být) a pak ho projede.
-Kolize s bludištěm se hlídají jen zjednodušeně: hřídel robota (svislá osa nad obručí) nesmí být
-blíž než R_BODY k žádnému kusu tyče, který je výš než obruč. Ramena jsou nad tyčí, ta se nekontrolují.
+Kolize s bludištěm se hlídají jen zjednodušeně: místo na rameni 2, které do tyče naráží (8.5 cm od osy
+hřídele směrem k lokti), je bráno jako svislý válec; žádný kus tyče, který sahá výš než jeho spodek, do něj nesmí.
 
   1. nafotit otáčející se desku -> střed otáčení, rychlost, natočení (image_processing)
   2. dráhu (body tyče) rozsekat na kroky po STEP_MM
@@ -28,7 +28,10 @@ SAFETY, GAP = 1.1, 0.05          # rozestup kroků = SAFETY * doba pohybu + GAP 
 MARGIN = 0.5                     # rezerva před startem [s]
 PHI_STEP = np.radians(5)         # jemnost hledání natočení obruče
 MAX_DPHI = np.radians(30)        # po dráze se q4 za krok otočí nejvýš o tolik (žádné otočky dokola)
-R_BODY = 0.05                    # min. vzdálenost osy hřídele od tyče [m] (poloměr příruby + tyče + rezerva)
+# místo na rameni 2, které naráží do tyče
+HOUSING_OFFSET = 0.085           # vzdálenost od osy hřídele směrem k lokti [m] (změřeno)
+HOUSING_R = 0.015                 # poloměr toho místa + poloměr tyče + rezerva [m] (ZMĚŘIT)
+HOUSING_Z = 0.03                 # o kolik je spodek skříně výš než obruč, když je hřídel nahoře (q3 = 0) [m]
 
 
 def duration(a, v, dq):
@@ -70,11 +73,17 @@ def rod_world(proc, rod_mm, t):
     return np.c_[(rod_mm[:, :2] @ R.T + c) / 1000, Z_PODLOZKA + rod_mm[:, 2] / 1000]
 
 
-def hits_rod(robot, q, rod_w):
-    """True, když je osa hřídele blíž než R_BODY ke kusu tyče, který je výš než obruč."""
-    x, y, z, _ = robot.fk(q)
-    above = rod_w[rod_w[:, 2] > z]
-    return len(above) > 0 and np.min(np.hypot(above[:, 0] - x, above[:, 1] - y)) < R_BODY
+def housing_gap(robot, q, rod_w):
+    """Vodorovná vzdálenost [m] místa na rameni 2 (HOUSING_OFFSET od osy hřídele k lokti) od nejbližšího
+    kusu tyče, který sahá výš než jeho spodek (rameno nejezdí s q3, je pořád stejně vysoko).
+    Kolize = méně než HOUSING_R."""
+    high = rod_w[rod_w[:, 2] > robot._z_offset + HOUSING_Z][:, :2]
+    if not len(high):
+        return np.inf
+    x, y, _, _ = robot.fk(q)
+    u = np.array([np.cos(q[0] + q[1]), np.sin(q[0] + q[1])])   # směr ramene 2 (od lokte ke hřídeli)
+    c = np.array([x, y]) - HOUSING_OFFSET * u                    # místo, které naráží
+    return np.min(np.linalg.norm(high - c, axis=1))
 
 
 def make_rod(points_mm, step=5.0):
@@ -89,7 +98,7 @@ def make_rod(points_mm, step=5.0):
 
 def ik_nearest(robot, p_mm, q_prev, first, rod_w):
     """Konfigurace, při které je střed obruče v bodě p_mm (svět, z nad deskou), nejbližší q_prev
-    a hřídelí nenarazí do tyče (rod_w). Po dráze (first=False) jen natočení do MAX_DPHI
+    a skříní ramene 2 nenarazí do tyče (rod_w). Po dráze (first=False) jen natočení do MAX_DPHI
     od předchozího a bez přeskoku lokte."""
     x, y, z = p_mm[0] / 1000, p_mm[1] / 1000, Z_PODLOZKA + p_mm[2] / 1000
     if first:
@@ -104,10 +113,13 @@ def ik_nearest(robot, p_mm, q_prev, first, rod_w):
     if not first:
         sols = [q for q in sols
                 if abs(q[3] - q_prev[3]) <= MAX_DPHI + 1e-9 and np.sign(q[1]) == np.sign(q_prev[1])]
-    sols = [q for q in sols if not hits_rod(robot, q, rod_w)]
+    gaps = [housing_gap(robot, q, rod_w) for q in sols]
+    sols = [(q, g) for q, g in zip(sols, gaps) if g >= HOUSING_R]   # bez kolize skříně ramene 2 s tyčí
     if not sols:
         return None
-    return min(sols, key=lambda q: np.linalg.norm(q - q_prev))
+    if first:                                            # na začátku natočit obruč co nejdál od skříně
+        return max(sols, key=lambda qg: min(qg[1], 1.0) - 0.01 * np.linalg.norm(qg[0] - q_prev))[0]
+    return min(sols, key=lambda qg: np.linalg.norm(qg[0] - q_prev))[0]
 
 
 def make_plan(robot, proc, path, model, n_iter=3):
@@ -128,7 +140,7 @@ def make_plan(robot, proc, path, model, n_iter=3):
             q_new = ik_nearest(robot, proc.predict_points(t + LEAD_T)[i], q, first=(i == 0),
                                rod_w=rod_world(proc, rod_mm, t + LEAD_T))
             if q_new is None:
-                print(f"Plán selhal: bod {i} nemá řešení IK bez kolize hřídele s tyčí")
+                print(f"Plán selhal: bod {i} nemá řešení IK bez kolize skříně ramene 2 s tyčí")
                 return None
             durs.append(duration(a, v, q_new - q))
             qs.append(q_new)
