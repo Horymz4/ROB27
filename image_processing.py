@@ -68,9 +68,9 @@ class image_proc:
             radial = centers.mean(axis=1) - self.rotation_center
             angles = np.unwrap(np.arctan2(radial[:, 1], radial[:, 0]))
             self.reference_time = times[-1]
-            self.angular_velocity, _ = np.polyfit(
+            self.angular_velocity, self.reference_angle = np.polyfit(
                 times - self.reference_time, angles, 1)
-            self.reference_angle = angles[-1]  # Skutecne natoceni na poslednim validnim snimku.
+            #self.reference_angle = angles[-1]  # Skutecne natoceni na poslednim validnim snimku.
             marker_vectors = centers[-1] - self.rotation_center
             self.marker_reference_angles = np.arctan2(marker_vectors[:, 1], marker_vectors[:, 0])
 

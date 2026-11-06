@@ -21,9 +21,9 @@ N_IMAGES, PERIOD = 15, 0.7       # focení desky
 D = 0.135 * np.array([np.cos(np.radians(187)), np.sin(np.radians(187))])  # střed obruče vůči koncovému bodu [m]
 Z_PODLOZKA = 0.27                # výška desky v souřadnicích robota [m]
 APPROACH_MM = 30.0               # o kolik nad horním koncem tyče se najíždí [mm]
-STEP_MM = 8.0                    # délka kroku po tyči [mm]
+STEP_MM = 6.7                        # délka kroku po tyči [mm]
 CAMERA_DELAY = 0.03              # čas od začátku volání grab_image do pořízení snímku [s]
-LEAD_T = 0.0                   # o kolik za okamžik příjezdu se míří [s]; předbíhá -> sniž, zaostává -> zvyš
+LEAD_T = -0.11                   # o kolik za okamžik příjezdu se míří [s]; předbíhá -> sniž, zaostává -> zvyš
 SAFETY, GAP = 1.1, 0.05          # rozestup kroků = SAFETY * doba pohybu + GAP [s]
 MARGIN = 0.5                     # rezerva před startem [s]
 PHI_STEP = np.radians(5)         # jemnost hledání natočení obruče
