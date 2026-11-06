@@ -33,7 +33,8 @@ HOUSING_OFFSET = 0.085           # vzdálenost od osy hřídele [m] (změřeno)
 HOUSING_ANGLE = np.radians(157)   # směr od osy hřídele, měřeno od směru ramene 2 (loket -> hřídel);
                                  # + = vlevo při pohledu od základny, 0 = dál od lokte, 180° = zpět k lokti
 HOUSING_R = 0.015                 # poloměr toho místa + poloměr tyče + rezerva [m] (ZMĚŘIT)
-HOUSING_Z = 0.03                 # o kolik je spodek skříně výš než obruč, když je hřídel nahoře (q3 = 0) [m]
+HOUSING_DZ = 0.03                # o kolik je spodek toho dílu výš než rovina obruče [m] (ZMĚŘIT);
+                                 # díl je přichycený k hřídeli, takže jezdí nahoru/dolů spolu s obručí
 
 
 def duration(a, v, dq):
@@ -77,13 +78,13 @@ def rod_world(proc, rod_mm, t):
 
 def housing_gap(robot, q, rod_w):
     """Vodorovná vzdálenost [m] místa na rameni 2 (HOUSING_OFFSET od osy hřídele ve směru HOUSING_ANGLE) od nejbližšího
-    kusu tyče, který sahá výš než jeho spodek (rameno nejezdí s q3, je pořád stejně vysoko).
+    kusu tyče, který sahá výš než jeho spodek (díl jezdí s hřídelí, takže je vždy HOUSING_DZ nad obručí).
     Kolize = méně než HOUSING_R."""
-    high = rod_w[rod_w[:, 2] > robot._z_offset + HOUSING_Z][:, :2]
+    x, y, z, _ = robot.fk(q)                                     # z = výška obruče
+    high = rod_w[rod_w[:, 2] > z + HOUSING_DZ][:, :2]
     if not len(high):
         return np.inf
-    x, y, _, _ = robot.fk(q)
-    ang = q[0] + q[1] + HOUSING_ANGLE                            # směr ramene 2 + 23° doleva
+    ang = q[0] + q[1] + HOUSING_ANGLE                            # směr ramene 2 + HOUSING_ANGLE
     c = np.array([x, y]) + HOUSING_OFFSET * np.array([np.cos(ang), np.sin(ang)])   # místo, které naráží
     return np.min(np.linalg.norm(high - c, axis=1))
 
