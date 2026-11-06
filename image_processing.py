@@ -19,16 +19,6 @@ class image_proc:
             self.H = homography_matrix
             return None
 
-    def images_to_numpy(self, data_dir):
-            with open(f"{data_dir}/meta.json") as f:
-                frames = json.load(f)["frames"]
-            return np.array([cv.imread(f"{data_dir}/{frame['file']}") for frame in frames])
-
-    def meta_to_time(self, meta_path):
-            with open(meta_path) as f:
-                meta = json.load(f)
-            return np.array([frame["t"] for frame in meta["frames"]])
-
     def find_aruco_centers(self, images, times):
             """Vrati stredy znacek 1 a 2 (N, 2, 2) a casy snimku s obema znackami."""
             dictionary = cv.aruco.getPredefinedDictionary(cv.aruco.DICT_4X4_50)
@@ -84,35 +74,6 @@ class image_proc:
             marker_vectors = centers[-1] - self.rotation_center
             self.marker_reference_angles = np.arctan2(marker_vectors[:, 1], marker_vectors[:, 0])
 
-    def time_correction(self, image, time, previous_offset=0.0):
-            """Celkovy posun casu [s] z ID 1/2; time je cas snimku. Bez znacky vrati None.
-
-            Pouziti: predict_points(time + offset). Vysledek nahrazuje stary offset.
-            previous_offset vybira nejblizsi otacku pri opakovanych korekcich.
-            """
-            dictionary = cv.aruco.getPredefinedDictionary(cv.aruco.DICT_4X4_50)
-            detector = cv.aruco.ArucoDetector(dictionary)
-            corners, ids, _ = detector.detectMarkers(image)
-            if ids is None:
-                return None
-            errors = []
-            for index, marker_id in enumerate(ids.ravel()):
-                if marker_id not in (1, 2):
-                    continue
-                center = cv.perspectiveTransform(corners[index], self.H)[0].mean(axis=0)
-                vector = center - self.rotation_center
-                if np.linalg.norm(vector) < 1e-6:
-                    continue  # Znacka na ose otaceni neurcuje natoceni svym stredem.
-                measured = np.arctan2(vector[1], vector[0])
-                expected = (self.marker_reference_angles[marker_id - 1] + self.angular_velocity
-                            * (time - self.reference_time + previous_offset))
-                errors.append(measured - expected)
-            if not errors:
-                return None
-            # Kruhovy prumer: funguje i pres prechod mezi -pi a +pi.
-            error = np.arctan2(np.sin(errors).mean(), np.cos(errors).mean())
-            return previous_offset + error / self.angular_velocity
-
     def predict_points(self, time):
             """Predikuje XYZ bodu (pocet_bodu, 3) v mm; vysku zachova."""
             theta = self.reference_angle + self.angular_velocity * (time - self.reference_time)
@@ -123,37 +84,3 @@ class image_proc:
             points = self.points.astype(float).copy()
             points[:, :2] = self.points[:, :2] @ R.T + square_center
             return points
-    
-    
-    
-
-
-
-    
-
-if __name__ == "__main__":
-    proc = image_proc()
-    
-    with open("calib/data.json") as f:
-        calibration = json.load(f)
-    calibration_images = np.array([cv.imread(f"calib/img{i:02d}.png") for i in range(len(calibration))])
-    q = np.array([frame["q"] for frame in calibration])
-    # FK + posun stredu obruce 135 mm ve smeru 185 stupnu od osy x nastroje.
-    angle = q[:, 3] + np.deg2rad(187)
-    x = 250 * np.cos(q[:, 0]) + 200 * np.cos(q[:, 0] + q[:, 1]) + 135 * np.cos(angle)
-    y = 250 * np.sin(q[:, 0]) + 200 * np.sin(q[:, 0] + q[:, 1]) + 135 * np.sin(angle)
-    hoop_positions = [{"translation_vector": [cx, cy, 0]} for cx, cy in zip(x, y)]
-    H = proc.find_homography(calibration_images, hoop_positions)
-
-    np.save("H.npy", H)  # pixely -> mm
-    data_dir = "data_rotace1"
-    images = proc.images_to_numpy(data_dir)
-    times = proc.meta_to_time(f"{data_dir}/meta.json")
-    centers, times = proc.find_aruco_centers(images, times)
-    print("Stredy znacek:", centers)
-    print("Casy:", times)
-    rotation_center, radius = proc.find_rotation_center(centers)
-    print("Stred rotace:", rotation_center)
-    print("Polomer drahy stredu ctverce:", radius)
-    square_angle = proc.find_square_angle(centers, rotation_center)
-    print("Uhel ctverce vuci polomeru [deg]:", np.degrees(square_angle))

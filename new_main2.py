@@ -7,33 +7,33 @@ from calibrate import fix_negative_uhel
 from image_processing import image_proc
 
 SPEED = 0.5
-IDS = (1, 2) #id aruco značek
-N_IMAGES, PERIOD = 9, 1.5
-D = 0.135 * np.array([np.cos(np.radians(187)), np.sin(np.radians(187))]) # střed obruče v s.s. koncového bodu [m]
-Z_PODLOZKA = 0.27 # vyska podlozky od zeme (v q[2] == -0.22)
-APPROACH_MM = 30.0                                        # výška nad prvním bodem dráhy, ve které se najíždí [mm]
-STEP_MM = 8 # nemenit                                           # max. délka kroku po dráze [mm]
-MAX_STEP_S, MAX_BIG_S = 4.0, 8.0                          # max. doba kroku / prvního přesunu [s] (nahrazuje limit skoku)
-SAFETY, DT_MIN, MARGIN, N_ITER = 0.9, 0.05, 0.5, 3         # rezerva na dobu kroku, min. odstup kroků [s], rezerva startu [s], iterace plánu
-PHI_GRID = np.radians(np.arange(-180, 180, 15))           # povolená natočení koncového bodu
+N_IMAGES, PERIOD = 15, 0.7
+ang = np.radians(187)
+D = 0.135 * np.array([np.cos(ang), np.sin(ang)])    # střed obruče [m]
+Z_PODLOZKA = 0.27                                   # vyska podlozky od zeme (v q[2] == -0.22)
+APPROACH_MM = 30.0                                  # výška nad prvním bodem dráhy, ve které se najíždí [mm]
+STEP_MM = 8                                         #  nemenit max. délka kroku po dráze [mm]
+MAX_STEP_S, MAX_BIG_S = 4.0, 8.0                    # max. doba kroku / prvního přesunu [s] (nahrazuje limit skoku)
+SAFETY, DT_MIN, MARGIN, N_ITER = 0.9, 0.05, 0.5, 3  # rezerva na dobu kroku, min. odstup kroků [s], rezerva startu [s], iterace plánu
+PHI_GRID = np.radians(np.arange(-180, 180, 15))     # povolená natočení koncového bodu
 
-ROD_TO_BOARD = True        # tyč pokračuje od posledního bodu dráhy svisle dolů až na desku
+ROD_TO_BOARD = True                                                      # tyč pokračuje od posledního bodu dráhy svisle dolů až na desku
 ROD_SAMPLE_MM = 2        # hustota bodů tyče pro kontrolu kolizí
 R_ROD = 0.0045              # poloměr tyče
 R_QUILL = 0.04             # poloměr hřídele + příruby kolem osy koncového bodu (sahá od obruče nahoru)
-QUILL_BELOW = 0.01         # o kolik příruba sahá pod rovinu obruče
+QUILL_BELOW = -0.02         # o kolik příruba sahá pod rovinu obruče
 R_ELBOW, Z_ELBOW = 0.09, 0.50       # poloměr pouzdra lokte a výška jeho spodku
 R_FOREARM, R_UPPER, Z_ARM = 0.06, 0.08, 0.55   # poloviční šířky ramen a výška jejich spodku
 CLEAR_MIN = 0.015          # min. vůle těla od tyče, jinak kolize
 
 #nevim kdyz je tohle dole mensi tak to jezdi lip i kdyz to nedava smyls
-LEAD_T = 0.4              # o kolik dopředu se míří za okamžik příjezdu [s] (= dřívější +0.4 v plánu + příjezd o 0.15 s dřív)
+LEAD_T = 0.55              # o kolik dopředu se míří za okamžik příjezdu [s] (= dřívější +0.4 v plánu + příjezd o 0.15 s dřív)
 TRANSIT_S = (0.5, 1.0)     # kde na přejezdu mezi kroky se kontrolují kolize (0.5 = půlka, 1 = cíl)
 T_CALC = 0.07                 # čas na přepočet cíle mezi kroky [s] (započte se do rozestupu kroků v plánu)
 
-L_LIMB = 0.08        # délka ramene od koncového bodu směrem ke středu obruče [m]
-R_LIMB = 0.03        # poloviční šířka tohoto ramene [m] (uprav podle reálného rozměru)
-EE_PHI_SIGN = (1, 1, 1)  # phi = s0*q0 + s1*q1 + s3*q3 -> ověř vůči robot.ik / fk
+L_LIMB = 0.07        # délka ramene od koncového bodu směrem ke středu obruče [m]
+R_LIMB = 0.04        # poloviční šířka tohoto ramene [m] 
+EE_PHI_SIGN = (1, 1, 1)  # phi = s0*q0 + s1*q1 + s3*q3
 
 
 def center_to_ee(cx, cy, phi):
@@ -108,7 +108,7 @@ def _seg_dist(p, a, b):
 def clearance(robot, qs, rod_w):
     """Nejmenší vůle [m] mezi tělem robota (hřídel, loket, ramena) a tyčí pro každé řešení qs (K,4)."""
     qs = np.atleast_2d(qs)
-    l1, l2 = robot.link_lengths()
+    l1, l2 = robot.link_lengths
     elbow = l1 * np.c_[np.cos(qs[:, 0]), np.sin(qs[:, 0])]
     ee = elbow + l2 * np.c_[np.cos(qs[:, 0] + qs[:, 1]), np.sin(qs[:, 0] + qs[:, 1])]
     z_ee = robot._z_offset + qs[:, 2]
@@ -123,7 +123,7 @@ def clearance(robot, qs, rod_w):
     shape = (len(qs), len(p))
     bodies = [
         (np.linalg.norm(p[None] - ee[:, None], axis=-1), R_QUILL, rz > (z_ee - QUILL_BELOW)[:, None]),
-        (_seg_dist(p, ee, limb_end), R_LIMB, rz > (z_ee - QUILL_BELOW)[:, None]),   # NOVÉ
+        (_seg_dist(p, ee, limb_end), R_LIMB, rz > (z_ee - QUILL_BELOW)[:, None]),   # druha tyc blizko k kruhu
         (np.linalg.norm(p[None] - elbow[:, None], axis=-1), R_ELBOW, np.broadcast_to(rz > Z_ELBOW, shape)),
         (_seg_dist(p, elbow, ee), R_FOREARM, np.broadcast_to(rz > Z_ARM, shape)),
         (_seg_dist(p, np.zeros_like(ee), elbow), R_UPPER, np.broadcast_to(rz > Z_ARM, shape)),
@@ -142,7 +142,7 @@ def select_ik(robot, sols, q_prev, rod_ws):
         return None
     ok = np.ones(len(sols), bool)
     for s in TRANSIT_S:
-        q_s = q_prev + s * (sols - q_prev)                       # robot jede lineárně v kloubech
+        q_s = q_prev + s * (sols - q_prev)
         for rod_w in rod_ws:
             ok &= clearance(robot, q_s, rod_w) >= CLEAR_MIN
     sols = sols[ok]
@@ -305,13 +305,13 @@ if __name__ == "__main__":
 
     proc.homography(np.load("H_angle_candidate_mm.npy"))
     images, times = observe(robot, N_IMAGES, PERIOD)
-    centers, valid_times = proc.find_aruco_centers(images, times, IDS)
+    centers, valid_times = proc.find_aruco_centers(images, times)
 
     if len(valid_times) <= 4:
         print(f"Značky nalezeny jen na {len(valid_times)} snímcích")
         robot.move_to_q([0.7, 0.4, 0, 2*np.pi])
         images, times = observe(robot, N_IMAGES, PERIOD)
-        centers, valid_times = proc.find_aruco_centers(images, times, IDS)
+        centers, valid_times = proc.find_aruco_centers(images, times)
 
     if len(valid_times) > 4:
         proc.fit_rotation(centers, valid_times)
