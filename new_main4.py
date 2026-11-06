@@ -136,7 +136,6 @@ def make_plan(robot, proc, path, model, n_iter=3):
     gaps = np.full(len(path), 0.5)                       # první odhad rozestupů [s]
     t_first = time.perf_counter() + 5.0
     i_low = int(np.argmin(path[:, 2]))                   # nejnižší bod = konec cesty dolů
-    print(f"kolize s tyčí se kontrolují pro body 0-{i_low}, cesta nahoru od bodu {i_low + 1} bez kontroly")
     for _ in range(n_iter):
         t_calc = time.perf_counter()
         times = t_first + np.r_[0.0, np.cumsum(gaps[1:])]
