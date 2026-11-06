@@ -13,7 +13,7 @@ D = 0.135 * np.array([np.cos(ang), np.sin(ang)])    # střed obruče [m]
 Z_PODLOZKA = 0.27                                   # vyska podlozky od zeme (v q[2] == -0.22)
 APPROACH_MM = 30.0                                  # výška nad prvním bodem dráhy, ve které se najíždí [mm]
 STEP_MM = 8                                         #  nemenit max. délka kroku po dráze [mm]
-MAX_STEP_S, MAX_BIG_S = 4.0, 8.0                    # max. doba kroku / prvního přesunu [s] (nahrazuje limit skoku)
+MAX_STEP_S, MAX_BIG_S = 8, 12.4                   # max. doba kroku / prvního přesunu [s] (nahrazuje limit skoku)
 SAFETY, DT_MIN, MARGIN, N_ITER = 0.9, 0.05, 0.5, 3  # rezerva na dobu kroku, min. odstup kroků [s], rezerva startu [s], iterace plánu
 PHI_GRID = np.radians(np.arange(-180, 180, 15))     # povolená natočení koncového bodu
 
@@ -24,16 +24,16 @@ R_QUILL = 0.04             # poloměr hřídele + příruby kolem osy koncového
 QUILL_BELOW = -0.02         # o kolik příruba sahá pod rovinu obruče
 R_ELBOW, Z_ELBOW = 0.09, 0.50       # poloměr pouzdra lokte a výška jeho spodku
 R_FOREARM, R_UPPER, Z_ARM = 0.06, 0.08, 0.55   # poloviční šířky ramen a výška jejich spodku
-CLEAR_MIN = 0.015          # min. vůle těla od tyče, jinak kolize
+CLEAR_MIN = 0.01          # min. vůle těla od tyče, jinak kolize
 
 #nevim kdyz je tohle dole mensi tak to jezdi lip i kdyz to nedava smyls
-LEAD_T = 0.55              # o kolik dopředu se míří za okamžik příjezdu [s] (= dřívější +0.4 v plánu + příjezd o 0.15 s dřív)
+LEAD_T = 0.4             # o kolik dopředu se míří za okamžik příjezdu [s] (= dřívější +0.4 v plánu + příjezd o 0.15 s dřív)
 TRANSIT_S = (0.5, 1.0)     # kde na přejezdu mezi kroky se kontrolují kolize (0.5 = půlka, 1 = cíl)
 T_CALC = 0.07                 # čas na přepočet cíle mezi kroky [s] (započte se do rozestupu kroků v plánu)
 
 L_LIMB = 0.07        # délka ramene od koncového bodu směrem ke středu obruče [m]
 R_LIMB = 0.04        # poloviční šířka tohoto ramene [m] 
-EE_PHI_SIGN = (1, 1, 1)  # phi = s0*q0 + s1*q1 + s3*q3
+
 
 
 def center_to_ee(cx, cy, phi):
@@ -41,8 +41,7 @@ def center_to_ee(cx, cy, phi):
     return np.array([cx, cy]) - R @ D
 
 def ee_phi(qs):
-    s0, s1, s3 = EE_PHI_SIGN
-    return s0 * qs[:, 0] + s1 * qs[:, 1] + s3 * qs[:, 3]
+    return qs[:, 0] +  qs[:, 1] 
 
 def duration(a, v, dq):
     """Odhad doby pohybu o dq podle změřeného modelu: max přes klouby z a_j + |dq_j| / v_j."""
@@ -305,11 +304,13 @@ if __name__ == "__main__":
 
     proc.homography(np.load("H_angle_candidate_mm.npy"))
     images, times = observe(robot, N_IMAGES, PERIOD)
+    robot.wait_for_motion_stop()
     centers, valid_times = proc.find_aruco_centers(images, times)
 
     if len(valid_times) <= 4:
         print(f"Značky nalezeny jen na {len(valid_times)} snímcích")
         robot.move_to_q([0.7, 0.4, 0, 2*np.pi])
+        robot.wait_for_motion_stop()
         images, times = observe(robot, N_IMAGES, PERIOD)
         centers, valid_times = proc.find_aruco_centers(images, times)
 
