@@ -31,11 +31,18 @@ LEAD_T = 0.4              # o kolik dopředu se míří za okamžik příjezdu [
 TRANSIT_S = (0.5, 1.0)     # kde na přejezdu mezi kroky se kontrolují kolize (0.5 = půlka, 1 = cíl)
 T_CALC = 0.07                 # čas na přepočet cíle mezi kroky [s] (započte se do rozestupu kroků v plánu)
 
+L_LIMB = 0.08        # délka ramene od koncového bodu směrem ke středu obruče [m]
+R_LIMB = 0.03        # poloviční šířka tohoto ramene [m] (uprav podle reálného rozměru)
+EE_PHI_SIGN = (1, 1, 1)  # phi = s0*q0 + s1*q1 + s3*q3 -> ověř vůči robot.ik / fk
+
 
 def center_to_ee(cx, cy, phi):
     R = np.array([[np.cos(phi), -np.sin(phi)], [np.sin(phi), np.cos(phi)]])
     return np.array([cx, cy]) - R @ D
 
+def ee_phi(qs):
+    s0, s1, s3 = EE_PHI_SIGN
+    return s0 * qs[:, 0] + s1 * qs[:, 1] + s3 * qs[:, 3]
 
 def duration(a, v, dq):
     """Odhad doby pohybu o dq podle změřeného modelu: max přes klouby z a_j + |dq_j| / v_j."""
@@ -105,10 +112,18 @@ def clearance(robot, qs, rod_w):
     elbow = l1 * np.c_[np.cos(qs[:, 0]), np.sin(qs[:, 0])]
     ee = elbow + l2 * np.c_[np.cos(qs[:, 0] + qs[:, 1]), np.sin(qs[:, 0] + qs[:, 1])]
     z_ee = robot._z_offset + qs[:, 2]
+
+    phi = ee_phi(qs)
+    d0 = D / np.linalg.norm(D)
+    dir_ring = np.c_[np.cos(phi) * d0[0] - np.sin(phi) * d0[1],
+                     np.sin(phi) * d0[0] + np.cos(phi) * d0[1]]
+    limb_end = ee + L_LIMB * dir_ring
+
     p, rz = rod_w[:, :2], rod_w[:, 2][None, :]
     shape = (len(qs), len(p))
-    bodies = [  # (vzdálenost K×M, poloměr, které body tyče jsou ve výšce dílu)
+    bodies = [
         (np.linalg.norm(p[None] - ee[:, None], axis=-1), R_QUILL, rz > (z_ee - QUILL_BELOW)[:, None]),
+        (_seg_dist(p, ee, limb_end), R_LIMB, rz > (z_ee - QUILL_BELOW)[:, None]),   # NOVÉ
         (np.linalg.norm(p[None] - elbow[:, None], axis=-1), R_ELBOW, np.broadcast_to(rz > Z_ELBOW, shape)),
         (_seg_dist(p, elbow, ee), R_FOREARM, np.broadcast_to(rz > Z_ARM, shape)),
         (_seg_dist(p, np.zeros_like(ee), elbow), R_UPPER, np.broadcast_to(rz > Z_ARM, shape)),
@@ -117,7 +132,6 @@ def clearance(robot, qs, rod_w):
     for dist, r, mask in bodies:
         clr = np.minimum(clr, np.where(mask, dist - r - R_ROD, np.inf).min(axis=1))
     return clr
-
 
 def select_ik(robot, sols, q_prev, rod_ws):
     """Z řešení IK vybere to, které je v limitech kloubů, nekoliduje s tyčí a je nejblíž q_prev
