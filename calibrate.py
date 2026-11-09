@@ -5,10 +5,13 @@ import time
 import cv2
 import numpy as np
 from ctu_bosch_sr450 import RobotBosch
+
 from image_processing import image_proc
 
-D = np.array([0.135, 0.0])
 OUT_DIR = "calib"
+CAPTURE = False                   # True = znovu nafotit kalibrační polohy
+HOOP_R = 135                      # vzdálenost středu obruče od osy hřídele [mm]
+HOOP_ANGLE = np.deg2rad(187)      # směr obruče vůči q4
 
 CALIB_Q = [
     [0.671, -0.137, -0.23, 8.378],
@@ -26,24 +29,8 @@ CALIB_Q = [
 ]
 
 
-def se2(x, y, phi):
-    c, s = np.cos(phi), np.sin(phi)
-    return np.array([[c, -s, x],
-                     [s, c, y],
-                     [0, 0, 1]])
-
-
-T_EE_HOOP = se2(D[0], D[1], 0.0)
-
-
-def hoop_center(robot, q):
-    """Střed obruče (cx, cy) v souřadnicích základny pro kloubovou konfiguraci q."""
-    x, y, _, phi = robot.fk(q)
-    T = se2(x, y, phi) @ T_EE_HOOP
-    return [float(T[0, 2]), float(T[1, 2])]
-
-
 def calibrate(robot):
+    """Projede CALIB_Q, uloží snímky a skutečné q do OUT_DIR."""
     os.makedirs(OUT_DIR, exist_ok=True)
     data = []
     for i, q in enumerate(CALIB_Q):
@@ -51,66 +38,51 @@ def calibrate(robot):
         robot.wait_for_motion_stop()
         time.sleep(0.5)
         q_real = robot.get_q()
-        img = robot.grab_image()
-        cv2.imwrite(f"{OUT_DIR}/img{i:02d}.png", img)
-        data.append({"q": q_real.tolist(), "hoop_xy": hoop_center(robot, q_real)})
+        cv2.imwrite(f"{OUT_DIR}/img{i:02d}.png", robot.grab_image())
+        x, y, _, phi = robot.fk(q_real)
+        data.append({"q": q_real.tolist(), "hoop_xy": [float(x + 0.135 * np.cos(phi)),
+                                                       float(y + 0.135 * np.sin(phi))]})
         print(f"[{i + 1}/{len(CALIB_Q)}] hotovo")
     with open(f"{OUT_DIR}/data.json", "w") as f:
         json.dump(data, f, indent=2)
 
 
 def fix_negative_uhel(robot, start=True):
-    """Natočí q4 do prostřední části rozsahu (start=True) nebo ho vrátí zpět (False)."""
-    q = np.array([0.7, 0.4, 0.0, 0.0])
-    if not start:
-        q[3] = 2 * np.pi
-    robot.move_to_q(q)
+    """Natočí q4 na 2π (start=True, pak odjede stranou) nebo ho vrátí na 0 (start=False)."""
+    robot.move_to_q([0.7, 0.4, 0.0, 0.0 if start else 2 * np.pi])
     robot.wait_for_motion_stop()
-
     q = robot.get_q()
     q[3] = 2 * np.pi if start else 0.0
     robot.move_to_q(q)
     robot.wait_for_motion_stop()
-    if start: 
-        robot.move_to_q([1.45, 0, 0, 2*np.pi])
+    if start:
+        robot.move_to_q([1.45, 0, 0, 2 * np.pi])
         robot.wait_for_motion_stop()
-    
 
 
-def detect_hoop_center(img):
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) if img.ndim == 3 else img
-    gray = cv2.medianBlur(gray, 5)
-    R_PX = 110
-    circles = cv2.HoughCircles(
-        gray, cv2.HOUGH_GRADIENT, dp=1, minDist=gray.shape[0],
-        param1=100, param2=30,
-        minRadius=int(2 * R_PX), maxRadius=int(4 * R_PX),
-    )
-    return None if circles is None else circles[0, 0, :2]
+def compute_homography():
+    """Homografie z uložených snímků a polohy středu obruče z kinematiky [mm]."""
+    with open(f"{OUT_DIR}/data.json") as f:
+        q = np.array([frame["q"] for frame in json.load(f)])
+    images = np.array([cv2.imread(f"{OUT_DIR}/img{i:02d}.png") for i in range(len(q))])
+    a1, a12, a4 = q[:, 0], q[:, 0] + q[:, 1], q[:, 3] + HOOP_ANGLE
+    x = 250 * np.cos(a1) + 200 * np.cos(a12) + HOOP_R * np.cos(a4)
+    y = 250 * np.sin(a1) + 200 * np.sin(a12) + HOOP_R * np.sin(a4)
+    hoop_positions = [{"translation_vector": [cx, cy, 0]} for cx, cy in zip(x, y)]
+    return image_proc().find_homography(images, hoop_positions)
 
 
 if __name__ == "__main__":
     robot = RobotBosch()
-    
-    robot.initialize()          
-    robot.set_speed_relative(0.5)            
+    robot.initialize()
+    robot.set_speed_relative(0.5)
     fix_negative_uhel(robot, True)
-
-    #calibrate(robot)
-
+    if CAPTURE:
+        calibrate(robot)
     fix_negative_uhel(robot, False)
     robot.soft_home()
 
-    proc = image_proc()
-    with open("calib/data.json") as f:
-        calibration = json.load(f)
-    calibration_images = np.array([cv2.imread(f"calib/img{i:02d}.png") for i in range(len(calibration))])
-    q = np.array([frame["q"] for frame in calibration])
-    angle = q[:, 3] + np.deg2rad(187)
-    x = 250 * np.cos(q[:, 0]) + 200 * np.cos(q[:, 0] + q[:, 1]) + 135 * np.cos(angle)
-    y = 250 * np.sin(q[:, 0]) + 200 * np.sin(q[:, 0] + q[:, 1]) + 135 * np.sin(angle)
-    hoop_positions = [{"translation_vector": [cx, cy, 0]} for cx, cy in zip(x, y)]
-    H = proc.find_homography(calibration_images, hoop_positions)
+    H = compute_homography()
     np.save("H.npy", H)
     print(H)
     robot.close()

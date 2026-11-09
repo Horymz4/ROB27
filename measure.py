@@ -5,7 +5,7 @@ Model: doba koordinovaného pohybu o dq = max_j (a_j + |dq_j| / v_j)   (domněnk
 Měří se při STEJNÉ relativní rychlosti, jakou pak používá main (SPEED). Robot se pohybuje kolem aktuální polohy,
 proto ho před spuštěním dej do volného místa (nad pracovní plochou, daleko od zdí).
 
-  python measure_robot.py            # změří a uloží duration_model.json
+  python measure.py                  # změří a uloží duration_model.json
 """
 import json
 import time
@@ -34,10 +34,13 @@ def measure_joint(robot, q0, j, distances):
     sign = 1.0 if q0[j] + max(distances) <= robot.q_max[j] else -1.0
     ds, ts, calls = [], [], []
     for d in distances:
-        q = q0.copy(); q[j] += sign * d
+        q = q0.copy()
+        q[j] += sign * d
         for _ in range(REPEATS):
             call, total = timed_move(robot, q)
-            ds.append(d); ts.append(total); calls.append(call)
+            ds.append(d)
+            ts.append(total)
+            calls.append(call)
             timed_move(robot, q0)                              # zpět (neměří se)
     ds, ts = np.array(ds), np.array(ts)
     slope, a = np.polyfit(ds, ts, 1)                           # t = a + d / v
@@ -70,7 +73,7 @@ def validate(robot, q0, a, v, n=6, seed=0):
 def main(robot, path="duration_model.json"):
     robot.set_speed_relative(SPEED)
     q0 = robot.get_q()
-    a = np.zeros(4); v = np.zeros(4)
+    a, v = np.zeros(4), np.zeros(4)
     for j in range(4):
         a[j], v[j], resid, call = measure_joint(robot, q0, j, DISTANCES[j])
         print(f"q{j + 1}: a = {a[j]:.2f} s, v = {v[j]:.3f} /s, rezidua do {np.abs(resid).max():.2f} s, "
