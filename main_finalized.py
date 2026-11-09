@@ -17,7 +17,7 @@ from image_processing import image_proc
 SPEED = 0.5                       # musí sedět s duration_model.json
 N_IMAGES, PERIOD = 22, 0.67
 MIN_IMAGES = 8                    # minimum snímků s oběma značkami
-PHOTO_Q = [-0.7, -0.4, 0, 2 * np.pi]
+PHOTO_Q = [-1.45, 0, 0, 2 * np.pi]
 
 D = 0.135 * np.array([np.cos(np.radians(189)), np.sin(np.radians(189))])  # střed obruče vůči koncovému bodu [m]
 Q2_OFF = 0.06                     # skutečné q2 = povelové q2 + Q2_OFF [rad]
@@ -42,7 +42,6 @@ HOUSING_DZ = 0.03                 # spodek dílu nad rovinou obruče [m]
 def rot(a):
     return np.array([[np.cos(a), -np.sin(a)], [np.sin(a), np.cos(a)]])
 
-
 def subdivide(poly, step):
     """Lomená čára rozdělená na úseky nejvýš step dlouhé."""
     out = [poly[0]]
@@ -50,7 +49,6 @@ def subdivide(poly, step):
         n = max(1, int(np.ceil(np.linalg.norm(p1 - p0) / step)))
         out += [p0 + (p1 - p0) * k / n for k in range(1, n + 1)]
     return np.array(out)
-
 
 def make_path(points_mm):
     pts = np.asarray(points_mm, float)
