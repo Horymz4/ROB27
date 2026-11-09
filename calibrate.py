@@ -61,7 +61,7 @@ def calibrate(robot):
 
 def fix_negative_uhel(robot, start=True):
     """Natočí q4 do prostřední části rozsahu (start=True) nebo ho vrátí zpět (False)."""
-    q = np.array([-0.7, -0.4, 0.0, 0.0])
+    q = np.array([0.7, 0.4, 0.0, 0.0])
     if not start:
         q[3] = 2 * np.pi
     robot.move_to_q(q)
@@ -71,6 +71,10 @@ def fix_negative_uhel(robot, start=True):
     q[3] = 2 * np.pi if start else 0.0
     robot.move_to_q(q)
     robot.wait_for_motion_stop()
+    if start: 
+        robot.move_to_q([1.45, 0, 0, 2*np.pi])
+        robot.wait_for_motion_stop()
+    
 
 
 def detect_hoop_center(img):

@@ -201,6 +201,7 @@ if __name__ == "__main__":
         proc.fit_rotation(centers, valid_times)
         print(f"střed otáčení {proc.rotation_center}, poloměr {proc.radius:.1f} mm, "
               f"omega {np.degrees(proc.angular_velocity):.1f} °/s")
+        
 
         plan = make_plan(robot, proc, make_path(proc.points), model)
         if plan is not None:

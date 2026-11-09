@@ -17,7 +17,7 @@ from calibrate import fix_negative_uhel
 from image_processing import image_proc
 
 SPEED = 0.5                      # musí sedět s duration_model.json
-N_IMAGES, PERIOD = 15, 0.7       # focení desky
+N_IMAGES, PERIOD = 22, 0.67       # focení desky
 D = 0.135 * np.array([np.cos(np.radians(187)), np.sin(np.radians(187))])  # střed obruče vůči koncovému bodu [m]
 Z_PODLOZKA = 0.27                # výška desky v souřadnicích robota [m]
 APPROACH_MM = 30.0               # o kolik nad horním koncem tyče se najíždí [mm]
@@ -183,31 +183,31 @@ if __name__ == "__main__":
 
         images, times = observe(robot, N_IMAGES, PERIOD)
         centers, valid_times = proc.find_aruco_centers(images, times)
-        if len(valid_times) < 6:  
+        if len(valid_times) < 8:  
             print(f"Značky nalezeny jen na {len(valid_times)} snímcích")
-            robot.move_to_q([0.7, 0.4, 0, 2*np.pi])
+            robot.move_to_q([-0.7, -0.4, 0, 2*np.pi])
             robot.wait_for_motion_stop()
             images, times = observe(robot, N_IMAGES, PERIOD)
             centers, valid_times = proc.find_aruco_centers(images, times)
-        if len(valid_times) < 6: 
+        if len(valid_times) < 8: 
             print(f"Značky nalezeny jen na {len(valid_times)} snímcích")
-            raise RuntimeError 
+            raise RuntimeError("Aruco značky nejsou vidět")
         print(f'pocet snimku: {len(valid_times)}')
         proc.fit_rotation(centers, valid_times)
         print(f"střed otáčení {proc.rotation_center}, poloměr {proc.radius:.1f} mm, "
               f"omega {np.degrees(proc.angular_velocity):.1f} °/s")
 
         if np.degrees(proc.angular_velocity) < 0: LEAD_T += 0.1
+        else: LEAD_T += 0.05
+        if proc.rotation_center[1] > 0: LEAD_T += 0.05
         else: LEAD_T -= 0.05
-        if proc.rotation_center[0] > 290: LEAD_T -= 0.05
-        else: LEAD_T+= 0.05
-
+        print(f'LEAD_T: {LEAD_T}')
 
         plan = make_plan(robot, proc, make_path(proc.points), model)
         if plan is not None:
             run_plan(robot, plan)
         else: 
-            robot.move_to_q([0.7, 0.4, 0, 2*np.pi])
+            robot.move_to_q([-0.7, -0.4, 0, 2*np.pi])
             robot.wait_for_motion_stop()
             images, times = observe(robot, N_IMAGES, PERIOD)
             centers, valid_times = proc.find_aruco_centers(images, times)
