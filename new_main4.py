@@ -21,18 +21,18 @@ N_IMAGES, PERIOD = 22, 0.67       # focení desky
 D = 0.135 * np.array([np.cos(np.radians(187)), np.sin(np.radians(187))])  # střed obruče vůči koncovému bodu [m]
 Z_PODLOZKA = 0.27                # výška desky v souřadnicích robota [m]
 APPROACH_MM = 30.0               # o kolik nad horním koncem tyče se najíždí [mm]
-STEP_MM = 6.7                        # délka kroku po tyči [mm]
+STEP_MM = 7.2                        # délka kroku po tyči [mm]
 CAMERA_DELAY = 0.03              # čas od začátku volání grab_image do pořízení snímku [s]
 LEAD_T = 0                  # o kolik za okamžik příjezdu se míří [s]; předbíhá -> sniž, zaostává -> zvyš
 SAFETY, GAP = 1.1, 0.05          # rozestup kroků = SAFETY * doba pohybu + GAP [s]
 MARGIN = 0.35                     # rezerva před startem [s]
 PHI_STEP = np.radians(5)         # jemnost hledání natočení obruče
-MAX_DPHI = np.radians(30)        # po dráze se q4 za krok otočí nejvýš o tolik (žádné otočky dokola)
+MAX_DPHI = np.radians(35)        # po dráze se q4 za krok otočí nejvýš o tolik (žádné otočky dokola)
 # místo na rameni 2, které naráží do tyče
 HOUSING_OFFSET = 0.085           # vzdálenost od osy hřídele [m] (změřeno)
 HOUSING_ANGLE = np.radians(157)   # směr od osy hřídele, měřeno od směru ramene 2 (loket -> hřídel);
                                  # + = vlevo při pohledu od základny, 0 = dál od lokte, 180° = zpět k lokti
-HOUSING_R = 0.035                 # poloměr toho místa + poloměr tyče + rezerva [m] (ZMĚŘIT)
+HOUSING_R = 0.035                 # poloměr toho místa + poloměr tyče + rezerva [m] 
 HOUSING_DZ = 0.03                # o kolik je spodek toho dílu výš než rovina obruče [m]
                                  # díl je přichycený k hřídeli, takže jezdí nahoru/dolů spolu s obručí
 
@@ -184,12 +184,6 @@ if __name__ == "__main__":
 
         images, times = observe(robot, N_IMAGES, PERIOD)
         centers, valid_times = proc.find_aruco_centers(images, times)
-        if len(valid_times) < 8:  
-            print(f"Značky nalezeny jen na {len(valid_times)} snímcích")
-            robot.move_to_q([-0.7, -0.4, 0, 2*np.pi])
-            robot.wait_for_motion_stop()
-            images, times = observe(robot, N_IMAGES, PERIOD)
-            centers, valid_times = proc.find_aruco_centers(images, times)
         if len(valid_times) < 8: 
             print(f"Značky nalezeny jen na {len(valid_times)} snímcích")
             raise RuntimeError("Aruco značky nejsou vidět")
@@ -198,19 +192,26 @@ if __name__ == "__main__":
         print(f"střed otáčení {proc.rotation_center}, poloměr {proc.radius:.1f} mm, "
               f"omega {np.degrees(proc.angular_velocity):.1f} °/s")
 
-        if np.degrees(proc.angular_velocity) < 0: LEAD_T += 0.1
-        else: LEAD_T += 0.05
-        if proc.rotation_center[1] > 0: LEAD_T += 0.05
+        if np.degrees(proc.angular_velocity) < 0: LEAD_T += 0.05
         else: LEAD_T -= 0.05
+        if proc.rotation_center[1] > 0: LEAD_T -= 0.05
+        else: LEAD_T -= 0.1
         print(f'LEAD_T: {LEAD_T}')
 
         plan = make_plan(robot, proc, make_path(points0), model)
         if plan is None:                                 # druhý pokus s novými snímky (jiné natočení stolku)
-            robot.move_to_q([-0.7, -0.4, 0, 2*np.pi])
+            robot.move_to_q([-1.45, 0.0, 0, 2*np.pi])
             robot.wait_for_motion_stop()
             images, times = observe(robot, N_IMAGES, PERIOD)
             centers, valid_times = proc.find_aruco_centers(images, times)
             proc.fit_rotation(centers, valid_times)
+            LEAD_T = 0
+            if np.degrees(proc.angular_velocity) < 0: LEAD_T += 0.1
+            else: LEAD_T += 0.0
+            if proc.rotation_center[1] > 0: LEAD_T -= 0.05
+            else: LEAD_T += 0.05
+            print(f'LEAD_T: {LEAD_T}')
+
             proc.points = points0.copy()                 # obnovit původní tyč
             plan = make_plan(robot, proc, make_path(points0), model)
         if plan is None:
