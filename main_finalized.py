@@ -21,8 +21,8 @@ PHOTO_Q = [-1.45, 0, 0, 2 * np.pi]
 
 D = 0.135 * np.array([np.cos(np.radians(189)), np.sin(np.radians(189))])  # střed obruče vůči koncovému bodu [m]
 Q2_OFF = 0.06                     # skutečné q2 = povelové q2 + Q2_OFF [rad]
-#H_FILE = "H_angle_candidate_mm.npy"
-H_FILE = "H_fit_mm.npy"
+H_FILE = "H_angle_candidate_mm.npy"
+#H_FILE = "H_fit_mm.npy"
 Z_PODLOZKA = 0.27                 # výška desky [m]
 
 APPROACH_MM = 30.0                # nájezd nad horní konec tyče [mm]
@@ -201,7 +201,6 @@ if __name__ == "__main__":
         proc = image_proc()
         points = proc.points.copy()
         proc.homography(np.load(H_FILE))
-        print(proc.homography)
         centers, valid_times = observe(robot, proc)
         if len(valid_times) < MIN_IMAGES:
             print(f"Značky nalezeny jen na {len(valid_times)} snímcích")
@@ -217,7 +216,7 @@ if __name__ == "__main__":
 
         lead = lead_time(proc)
         print(f"LEAD_T: {lead}")
-        plan = make_plan(robot, proc, points, model, lead)
+            plan = make_plan(robot, proc, points, model, lead)
         if plan is None:                                 # druhý pokus při jiném natočení stolku
             go_photo(robot)
             proc.fit_rotation(*observe(robot, proc))
