@@ -23,9 +23,9 @@ Z_PODLOZKA = 0.27                # výška desky v souřadnicích robota [m]
 APPROACH_MM = 30.0               # o kolik nad horním koncem tyče se najíždí [mm]
 STEP_MM = 6.7                        # délka kroku po tyči [mm]
 CAMERA_DELAY = 0.03              # čas od začátku volání grab_image do pořízení snímku [s]
-LEAD_T = -0.11                   # o kolik za okamžik příjezdu se míří [s]; předbíhá -> sniž, zaostává -> zvyš
+LEAD_T = 0                  # o kolik za okamžik příjezdu se míří [s]; předbíhá -> sniž, zaostává -> zvyš
 SAFETY, GAP = 1.1, 0.05          # rozestup kroků = SAFETY * doba pohybu + GAP [s]
-MARGIN = 0.5                     # rezerva před startem [s]
+MARGIN = 0.35                     # rezerva před startem [s]
 PHI_STEP = np.radians(5)         # jemnost hledání natočení obruče
 MAX_DPHI = np.radians(30)        # po dráze se q4 za krok otočí nejvýš o tolik (žádné otočky dokola)
 # místo na rameni 2, které naráží do tyče
@@ -183,7 +183,7 @@ if __name__ == "__main__":
 
         images, times = observe(robot, N_IMAGES, PERIOD)
         centers, valid_times = proc.find_aruco_centers(images, times)
-        if len(valid_times) < 6:
+        if len(valid_times) < 6:  
             print(f"Značky nalezeny jen na {len(valid_times)} snímcích")
             robot.move_to_q([0.7, 0.4, 0, 2*np.pi])
             robot.wait_for_motion_stop()
@@ -197,12 +197,27 @@ if __name__ == "__main__":
         print(f"střed otáčení {proc.rotation_center}, poloměr {proc.radius:.1f} mm, "
               f"omega {np.degrees(proc.angular_velocity):.1f} °/s")
 
+        if np.degrees(proc.angular_velocity) < 0: LEAD_T += 0.1
+        else: LEAD_T -= 0.05
+        if proc.rotation_center[0] > 290: LEAD_T -= 0.05
+        else: LEAD_T+= 0.05
+
+
         plan = make_plan(robot, proc, make_path(proc.points), model)
         if plan is not None:
             run_plan(robot, plan)
-            q = robot.get_q(); q[2] = 0.0
-            robot.move_to_q(q)
+        else: 
+            robot.move_to_q([0.7, 0.4, 0, 2*np.pi])
             robot.wait_for_motion_stop()
+            images, times = observe(robot, N_IMAGES, PERIOD)
+            centers, valid_times = proc.find_aruco_centers(images, times)
+            proc.fit_rotation(centers, valid_times)
+            plan = make_plan(robot, proc, make_path(proc.points), model)
+            run_plan(robot, plan)
+
+        q = robot.get_q(); q[2] = 0.0
+        robot.move_to_q(q)
+        robot.wait_for_motion_stop()
     finally:
         robot.set_speed_relative(1)
         fix_negative_uhel(robot, False)
