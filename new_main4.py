@@ -179,6 +179,7 @@ if __name__ == "__main__":
         fix_negative_uhel(robot, True)
         robot.set_speed_relative(SPEED)
         proc = image_proc()
+        points0 = proc.points.copy()                     # původní body tyče (make_plan je přepisuje hustou dráhou)
         proc.homography(np.load("H_angle_candidate_mm.npy"))
 
         images, times = observe(robot, N_IMAGES, PERIOD)
@@ -203,16 +204,18 @@ if __name__ == "__main__":
         else: LEAD_T -= 0.05
         print(f'LEAD_T: {LEAD_T}')
 
-        plan = make_plan(robot, proc, make_path(proc.points), model)
-        if plan is not None:
-            run_plan(robot, plan)
-        else: 
+        plan = make_plan(robot, proc, make_path(points0), model)
+        if plan is None:                                 # druhý pokus s novými snímky (jiné natočení stolku)
             robot.move_to_q([-0.7, -0.4, 0, 2*np.pi])
             robot.wait_for_motion_stop()
             images, times = observe(robot, N_IMAGES, PERIOD)
             centers, valid_times = proc.find_aruco_centers(images, times)
             proc.fit_rotation(centers, valid_times)
-            plan = make_plan(robot, proc, make_path(proc.points), model)
+            proc.points = points0.copy()                 # obnovit původní tyč
+            plan = make_plan(robot, proc, make_path(points0), model)
+        if plan is None:
+            print("Bludiště je v této poloze nedosažitelné, nepohybuji se.")
+        else:
             run_plan(robot, plan)
 
         q = robot.get_q(); q[2] = 0.0
