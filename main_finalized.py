@@ -216,7 +216,7 @@ if __name__ == "__main__":
 
         lead = lead_time(proc)
         print(f"LEAD_T: {lead}")
-            plan = make_plan(robot, proc, points, model, lead)
+        plan = make_plan(robot, proc, points, model, lead)
         if plan is None:                                 # druhý pokus při jiném natočení stolku
             go_photo(robot)
             proc.fit_rotation(*observe(robot, proc))
