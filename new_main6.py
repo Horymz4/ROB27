@@ -20,11 +20,10 @@ SPEED = 0.5                      # musí sedět s duration_model.json
 N_IMAGES, PERIOD = 22, 0.67       # focení desky
 # Kalibrace obruče (výstup fit_calibration.py z calib/): poloha středu obruče vůči koncovému bodu
 # a posun nuly kloubu q2 (skutečné q2 = povelové q2 + Q2_OFF). Homografie H_FILE je spočítaná se stejnými hodnotami.
-with open("hoop_model.json") as _f:
-    _hm = json.load(_f)
-D = np.array(_hm["D_mm"]) / 1000                 # střed obruče vůči koncovému bodu [m] (~134 mm pod ~189°)
-Q2_OFF = _hm["q2_offset"]                        # [rad] (~0.060 = 3.4°)
-H_FILE = "H_fit_mm.npy"
+D = 0.135 * np.array([np.cos(np.radians(189)), np.sin(np.radians(189))])  # střed obruče vůči koncovému bodu [m]
+            # střed obruče vůči koncovému bodu [m] (~134 mm pod ~189°)
+Q2_OFF = 0.06                      # [rad] (~0.060 = 3.4°)
+H_FILE = "H_angle_candidate_mm.npy"
 Z_PODLOZKA = 0.27                # výška desky v souřadnicích robota [m]
 APPROACH_MM = 30.0               # o kolik nad horním koncem tyče se najíždí [mm]
 STEP_MM = 6.7                        # délka kroku po tyči [mm]
@@ -208,10 +207,10 @@ if __name__ == "__main__":
         print(f"střed otáčení {proc.rotation_center}, poloměr {proc.radius:.1f} mm, "
               f"omega {np.degrees(proc.angular_velocity):.1f} °/s")
 
-        if np.degrees(proc.angular_velocity) < 0: LEAD_T += 0.1
-        else: LEAD_T += 0.05
-        if proc.rotation_center[1] > 0: LEAD_T += 0.05
-        else: LEAD_T -= 0.05
+        if np.degrees(proc.angular_velocity) < 0: LEAD_T += 0.05
+        else: LEAD_T -= 0.03
+        if proc.rotation_center[1] > 0: LEAD_T -= 0.05
+        else: LEAD_T -= 0.0
         print(f'LEAD_T: {LEAD_T}')
 
         plan = make_plan(robot, proc, make_path(points0), model)
@@ -221,6 +220,7 @@ if __name__ == "__main__":
             images, times = observe(robot, N_IMAGES, PERIOD)
             centers, valid_times = proc.find_aruco_centers(images, times)
             proc.fit_rotation(centers, valid_times)
+
             proc.points = points0.copy()                 # obnovit původní tyč
             plan = make_plan(robot, proc, make_path(points0), model)
         if plan is None:
